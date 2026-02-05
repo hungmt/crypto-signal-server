@@ -203,6 +203,6 @@ async function scanNow(symbol) {
   fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
 }
 
-loop();
+//loop();
 
 module.exports = { signalsCache, scanNow };

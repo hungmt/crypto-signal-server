@@ -96,4 +96,24 @@ app.delete("/favorites/:symbol", (req, res) => {
   res.json(favs);
 });
 loadSymbols();
+// 👇 CRON sẽ gọi API này
+app.get("/scan", async (req, res) => {
+  console.log("⏰ CRON SCAN START");
+
+  try {
+    const favs = JSON.parse(fs.readFileSync("favorites.json"));
+
+    for (const s of favs) {
+      await scanNow(s);
+    }
+
+    fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
+
+    console.log("✅ SCAN DONE");
+    res.send("OK");
+  } catch (e) {
+    console.log(e.message);
+    res.status(500).send("Error");
+  }
+});
 app.listen(3000, () => console.log("API running 3000"));
