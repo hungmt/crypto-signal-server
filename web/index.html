@@ -29,10 +29,24 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>crypto_signal_web</title>
-  <link rel="manifest" href="manifest.json">
+ <title>Crypto Entry Signals</title>
+<meta name="description" content="Free crypto RSI & LuxAlgo signals. Trade smarter.">
+<meta property="og:title" content="Crypto Entry Signals">
+<meta property="og:description" content="Realtime RSI + LuxAlgo signals for Binance, MEXC...">
+
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
+  <script src="https://cdn.onesignal.com/sdks/OneSignalSDK.js" async></script>
+<script>
+  window.OneSignal = window.OneSignal || [];
+  OneSignal.push(function () {
+    OneSignal.init({
+      appId: "75d863af-e24a-4852-bf25-92fa3fc8ae94",
+      notifyButton: { enable: true },
+      allowLocalhostAsSecureOrigin: true,
+    });
+  });
+</script>
 </body>
 </html>

@@ -1,26 +1,61 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-const baseUrl = "http://localhost:3000";
+const String baseUrl = "https://cryptosignal.site"; 
+// local test: http://localhost:3000
+//const String baseUrl = "http://localhost:3000"; 
+/// ===== LẤY TOÀN BỘ SYMBOL TỪ BINANCE (qua server)
+Future<List<String>> fetchSymbols(String text) async {
+  final url = Uri.parse("$baseUrl/symbols?search=$text");
 
-Future<List<String>> fetchSymbols() async {
-  final res = await http.get(Uri.parse("$baseUrl/symbols"));
-  final data = jsonDecode(res.body);
-  return List<String>.from(data);
-}
+  final res = await http.get(url);
 
-Future<List<dynamic>> fetchSignals(
-    List<String> symbols, String interval) async {
-  List results = [];
-
-  for (var s in symbols) {
-    final res = await http.get(Uri.parse(
-        "$baseUrl/signal?symbol=$s&interval=$interval"));
-
-    if (res.statusCode == 200) {
-      results.add(jsonDecode(res.body));
-    }
+  if (res.statusCode == 200) {
+    final List data = jsonDecode(res.body);
+    return data.map((e) => e.toString()).toList();
   }
 
-  return results;
+  return [];
+}
+
+
+/// ===== LẤY FAVORITES TỪ SERVER
+Future<List<String>> fetchFavorites() async {
+  final res = await http.get(Uri.parse("$baseUrl/favorites"));
+
+  if (res.statusCode == 200) {
+    final List data = jsonDecode(res.body);
+    return data.map((e) => e.toString()).toList();
+  }
+  return [];
+}
+
+/// ===== ADD FAVORITE
+Future<void> addFavorite(String symbol) async {
+  await http.post(
+    Uri.parse("$baseUrl/favorites"),
+    headers: {"Content-Type": "application/json"},
+    body: jsonEncode({"symbol": symbol}),
+  );
+}
+
+/// ===== REMOVE FAVORITE
+Future<void> removeFavorite(String symbol) async {
+  await http.delete(Uri.parse("$baseUrl/favorites/$symbol"));
+}
+
+/// ===== LẤY SIGNAL THEO TIMEFRAME
+Future<List<dynamic>> fetchSignals(String interval) async {
+  final res = await http.get(
+    Uri.parse("$baseUrl/signals?interval=$interval"),
+  );
+
+  if (res.statusCode == 200) {
+    final Map<String, dynamic> data = jsonDecode(res.body);
+
+    /// server trả về dạng Map {BTCUSDT: {...}}
+    return data.values.toList();
+  }
+
+  return [];
 }
