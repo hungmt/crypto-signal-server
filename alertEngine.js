@@ -181,7 +181,7 @@ async function processSymbol(symbol) {
         await pushSignal(signalsCache[symbol][tf]);
         console.log("🚨", symbol, tf, signal);
       } else {
-        await pushSignal(signalsCache[symbol][tf]);
+       // await pushSignal(signalsCache[symbol][tf]);
         console.log("No change test push:", symbol, tf, signal, prev);
       }
     } catch (e) {
