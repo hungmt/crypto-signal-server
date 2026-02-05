@@ -1,16 +1,14 @@
 const axios = require("axios");
 
-const ONE_SIGNAL_APP_ID = process.env.ONE_SIGNAL_APP_ID;
-const ONE_SIGNAL_API_KEY = process.env.ONE_SIGNAL_API_KEY;
+const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
+const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY;
 
 async function pushSignal(data) {
   try {
     await axios.post(
-      "https://api.onesignal.com/notifications",
+      "https://onesignal.com/api/v1/notifications",
       {
-        app_id: ONE_SIGNAL_APP_ID,
-        target_channel: "push",
-
+        app_id: ONESIGNAL_APP_ID,
         included_segments: ["All"],
 
         headings: {
@@ -41,18 +39,16 @@ async function pushSignal(data) {
       },
       {
         headers: {
-          Authorization: `Key ${ONE_SIGNAL_API_KEY}`, // ⚠️ Key chứ không phải Basic nữa
           "Content-Type": "application/json",
+          Authorization: `Basic ${ONESIGNAL_API_KEY}`,
         },
       }
     );
 
-    console.log("Pushed:", data.symbol, data.interval);
+    console.log("✅ PUSH SENT:", data.symbol, data.interval);
   } catch (e) {
-    console.log("Push error:", e.response?.data || e.message);
-    console.log("Push error: id", ONE_SIGNAL_API_KEY);
+    console.log("❌ Push error:", e.response?.data || e.message);
   }
 }
-
 
 module.exports = { pushSignal };
