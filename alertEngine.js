@@ -165,20 +165,23 @@ async function processSymbol(symbol) {
         symbol,
         interval: tf,
         price: livePrice,
+        entry: trade.entry,
+        tp: trade.tp,
+        sl: trade.sl,
         rsi: Number(rsi.toFixed(2)),
         upper: up,
         lower: lo,
         signal,
-        ...trade,
         lastClosedTime,
         time: Date.now(),
       };
 
+
       if (signal !== "WAIT" && signal !== prev) {
         await pushSignal(signalsCache[symbol][tf]);
         console.log("🚨", symbol, tf, signal);
-      }else{
-         await pushSignal(signalsCache[symbol][tf]);
+      } else {
+        await pushSignal(signalsCache[symbol][tf]);
         console.log("No change test push:", symbol, tf, signal, prev);
       }
     } catch (e) {

@@ -16,12 +16,16 @@ async function pushSignal(data) {
         },
 
         contents: {
-          en: `Entry: ${data.entry}\nTP: ${data.tp}\nSL: ${data.sl}`,
+          en: `Entry: ${data.entry ?? data.price}
+TP: ${data.tp ?? "-"}
+SL: ${data.sl ?? "-"}`,
         },
 
         url: `https://cryptosignal.site/?tf=${data.interval}`,
 
-        buttons: [
+        chrome_web_icon: "https://cryptosignal.site/icons/Icon-192.png",
+
+        web_buttons: [
           {
             id: "binance",
             text: "Trade Binance",
@@ -50,5 +54,6 @@ async function pushSignal(data) {
     console.log("❌ Push error:", e.response?.data || e.message);
   }
 }
+
 
 module.exports = { pushSignal };
