@@ -6,6 +6,7 @@ const { pushSignal } = require("./notifier");
 const signalsCache = {};
 const INTERVALS = ["15m", "1h", "2h", "4h", "1d"];
 
+// ================= FAVORITES =================
 function getFavorites() {
   try {
     const favs = JSON.parse(fs.readFileSync("favorites.json"));
@@ -15,18 +16,26 @@ function getFavorites() {
   }
 }
 
-// ====== FETCH KLINES ĐÚNG CẤU TRÚC ======
+// ================= KLINES =================
 async function getKlines(symbol, interval, limit = 300) {
-  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-  const { data } = await axios.get(url);
-  return data; // giữ nguyên structure Binance
+  const { data } = await axios.get(
+    `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
+  );
+
+  return data.map(k => ({
+    time: k[0],
+    open: Number(k[1]),
+    high: Number(k[2]),
+    low: Number(k[3]),
+    close: Number(k[4]),
+  }));
 }
 
-// ====== ATR ======
+// ================= ATR =================
 function calcATR(klines) {
-  const highs = klines.map(k => Number(k[2]));
-  const lows = klines.map(k => Number(k[3]));
-  const closes = klines.map(k => Number(k[4]));
+  const highs = klines.map(k => k.high);
+  const lows = klines.map(k => k.low);
+  const closes = klines.map(k => k.close);
 
   const arr = ATR.calculate({
     high: highs,
@@ -39,15 +48,16 @@ function calcATR(klines) {
 }
 
 function atrMultiplier(tf) {
-  if (tf === "15m") return 1.2;
-  if (tf === "1h") return 1.5;
-  if (tf === "2h") return 1.8;
-  if (tf === "4h") return 2.2;
-  if (tf === "1d") return 3.0;
-  return 1.5;
+  return {
+    "15m": 1.2,
+    "1h": 1.5,
+    "2h": 1.8,
+    "4h": 2.2,
+    "1d": 3.0,
+  }[tf] || 1.5;
 }
 
-// ====== NW ENVELOPE ======
+// ================= NW ENVELOPE =================
 function nw(values, h = 8, window = 60) {
   const out = [];
   for (let i = 0; i < values.length; i++) {
@@ -63,35 +73,30 @@ function nw(values, h = 8, window = 60) {
   return out;
 }
 
-function envelope(nw, values, mult = 2) {
-  const dev = values.map((v, i) => Math.abs(v - nw[i]));
+function envelope(nwLine, values, mult = 2) {
+  const dev = values.map((v, i) => Math.abs(v - nwLine[i]));
   const avg = dev.reduce((a, b) => a + b, 0) / dev.length;
 
   return {
-    upper: nw.map(v => v + avg * mult),
-    lower: nw.map(v => v - avg * mult),
+    upper: nwLine.map(v => v + avg * mult),
+    lower: nwLine.map(v => v - avg * mult),
   };
 }
 
-// ====== TRADE ======
+// ================= TRADE =================
 function calcTrade(price, up, lo, mid, atr, tf, signal) {
-  const k = atrMultiplier(tf);
-
   if (!atr || !up || !lo || !mid) {
     return { entry: null, tp: null, sl: null, rr: null };
   }
+
+  const k = atrMultiplier(tf);
 
   if (signal === "LONG") {
     const sl = lo - atr * k;
     const tp = mid;
     const rr = (tp - price) / (price - sl);
 
-    return {
-      entry: price,
-      tp,
-      sl,
-      rr: Number(rr.toFixed(2)),
-    };
+    return { entry: price, tp, sl, rr: Number(rr.toFixed(2)) };
   }
 
   if (signal === "SHORT") {
@@ -99,18 +104,13 @@ function calcTrade(price, up, lo, mid, atr, tf, signal) {
     const tp = mid;
     const rr = (price - tp) / (sl - price);
 
-    return {
-      entry: price,
-      tp,
-      sl,
-      rr: Number(rr.toFixed(2)),
-    };
+    return { entry: price, tp, sl, rr: Number(rr.toFixed(2)) };
   }
 
   return { entry: null, tp: null, sl: null, rr: null };
 }
 
-// ====== PRICE ======
+// ================= PRICE =================
 async function getLivePrice(symbol) {
   const { data } = await axios.get(
     `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`
@@ -118,7 +118,7 @@ async function getLivePrice(symbol) {
   return Number(data.price);
 }
 
-// ====== CORE ======
+// ================= CORE =================
 async function processSymbol(symbol) {
   if (!signalsCache[symbol]) signalsCache[symbol] = {};
 
@@ -128,9 +128,12 @@ async function processSymbol(symbol) {
     try {
       const klines = await getKlines(symbol, tf);
 
-      const closes = klines.map(k => Number(k[4])).slice(0, -1);
-      const lastClosedTime = klines[klines.length - 2][0];
+      // bỏ nến đang chạy
+      const closed = klines.slice(0, -1);
+      const closes = closed.map(k => k.close);
+      const lastClosedTime = closed.at(-1).time;
 
+      // nếu nến chưa đổi → chỉ update giá
       if (
         signalsCache[symbol][tf] &&
         signalsCache[symbol][tf].lastClosedTime === lastClosedTime
@@ -139,10 +142,7 @@ async function processSymbol(symbol) {
         continue;
       }
 
-      const rsi = RSI.calculate({
-        values: closes,
-        period: 14,
-      }).at(-1);
+      const rsi = RSI.calculate({ values: closes, period: 14 }).at(-1);
 
       const nwLine = nw(closes);
       const { upper, lower } = envelope(nwLine, closes);
@@ -184,7 +184,7 @@ async function processSymbol(symbol) {
   }
 }
 
-// ====== LOOP ======
+// ================= LOOP =================
 async function loop() {
   const favs = getFavorites();
 
@@ -196,13 +196,10 @@ async function loop() {
   setTimeout(loop, 60 * 1000);
 }
 
-// ====== SCAN NOW ======
+// ================= SCAN NOW =================
 async function scanNow(symbol) {
-  if (!signalsCache[symbol]) signalsCache[symbol] = {};
   await processSymbol(symbol);
   fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
 }
-
-//loop();
 
 module.exports = { signalsCache, scanNow };
