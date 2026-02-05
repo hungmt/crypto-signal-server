@@ -1,7 +1,7 @@
 const axios = require("axios");
 
-const ONE_SIGNAL_APP_ID = "75d863af-e24a-4852-bf25-92fa3fc8ae94";
-const ONE_SIGNAL_API_KEY = "os_v2_app_oxmghl7cjjeffpzfsl5d7sfosrhle6v7l4gubpmv7uul72indjrrxfsmhaj2dc57r2nxkflltzmmzwvslhbrzx6cng2lkmfrzfwbwfy";
+const ONE_SIGNAL_APP_ID = process.env.ONE_SIGNAL_APP_ID;
+const ONE_SIGNAL_API_KEY = process.env.ONE_SIGNAL_API_KEY;
 
 async function pushSignal(data) {
   try {
