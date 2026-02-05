@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-const String baseUrl = "https://cryptosignal.site"; 
+const String baseUrl = "https://crypto-signal-server.onrender.com";
 // local test: http://localhost:3000
 //const String baseUrl = "http://localhost:3000"; 
 /// ===== LẤY TOÀN BỘ SYMBOL TỪ BINANCE (qua server)
