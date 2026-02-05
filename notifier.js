@@ -50,6 +50,7 @@ async function pushSignal(data) {
     console.log("Pushed:", data.symbol, data.interval);
   } catch (e) {
     console.log("Push error:", e.response?.data || e.message);
+    console.log("Push error: id", ONE_SIGNAL_API_KEY);
   }
 }
 
