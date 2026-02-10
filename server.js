@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
-const { signalsCache, scanNow } = require("./alertEngine");
+const { signalsCache, scanNow,warmSymbol  } = require("./alertEngine");
 const axios = require("axios");
 const app = express();
 app.use(cors());
@@ -74,14 +74,18 @@ app.get("/signals", (req, res) => {
 });
 
 
-app.post("/favorites", (req, res) => {
+app.post("/favorites", async (req, res) => {
 
   const { symbol } = req.body;
   const favs = getFavorites();
 
   if (!favs.includes(symbol) && favs.length < 10) {
+
     favs.push(symbol);
     fs.writeFileSync("favorites.json", JSON.stringify(favs));
+
+    /* 👉 Load dữ liệu riêng symbol mới */
+    await warmSymbol(symbol);
   }
 
   res.json(favs);

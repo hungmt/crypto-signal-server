@@ -213,37 +213,43 @@ function checkSignalLive(symbol, tf, price) {
 
 async function scanNow() {
 
+  /* ===== ALWAYS UPDATE PRICE ===== */
   await loadAllPrices();
+
   const favs = getFavorites();
+  const minute = new Date().getMinutes();
 
-  for (const tf of INTERVALS) {
+  for (const symbol of favs) {
 
-    const needUpdate = hasNewClosedCandle(tf);
+    if (!signalsCache[symbol]) signalsCache[symbol] = {};
 
-    for (const symbol of favs) {
+    const price = priceMap[symbol];
+
+    for (const tf of INTERVALS) {
+
       try {
 
-        if (!signalsCache[symbol]) signalsCache[symbol] = {};
+        /* ===== SCAN SCHEDULER ===== */
+        let shouldScan = false;
 
-        if (needUpdate) {
+        if (tf === "15m") shouldScan = minute % 3 === 0;
+        if (tf === "1h")  shouldScan = minute % 5 === 0;
+        if (tf === "2h")  shouldScan = minute % 10 === 0;
+        if (tf === "4h")  shouldScan = minute % 15 === 0;
+        if (tf === "1d")  shouldScan = minute % 30 === 0;
+
+        if (shouldScan && hasNewClosedCandle(tf)) {
+
           await updateIndicators(symbol, tf);
+
+          /* chống block */
+          await new Promise(r =>
+            setTimeout(r, 150 + Math.random() * 250)
+          );
         }
 
-        const price = priceMap[symbol];
+        /* ===== CHECK SIGNAL ===== */
         checkSignalLive(symbol, tf, price);
-
-        const key = `${symbol}_${tf}`;
-        const curr = signalsCache[symbol][tf]?.signal || "WAIT";
-        const prev = lastPushedSignal[key] || "WAIT";
-
-        if (curr !== prev) {
-          lastPushedSignal[key] = curr;
-
-          if (curr !== "WAIT") {
-            await pushSignal(signalsCache[symbol][tf]);
-            console.log("🚨 PUSH", symbol, tf, curr);
-          }
-        }
 
       } catch (e) {
         console.log("Error", symbol, tf, e.message);
@@ -254,4 +260,32 @@ async function scanNow() {
   fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
 }
 
-module.exports = { scanNow, signalsCache };
+async function warmSymbol(symbol) {
+
+  if (!signalsCache[symbol]) signalsCache[symbol] = {};
+
+  await loadAllPrices();
+
+  for (const tf of INTERVALS) {
+
+    try {
+
+      await updateIndicators(symbol, tf);
+
+      const price = priceMap[symbol];
+      checkSignalLive(symbol, tf, price);
+
+      await new Promise(r =>
+        setTimeout(r, 200 + Math.random() * 200)
+      );
+
+    } catch (e) {
+      console.log("Warm symbol error", symbol, tf, e.message);
+    }
+  }
+
+  fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
+}
+
+module.exports = { scanNow, signalsCache, warmSymbol };
+
