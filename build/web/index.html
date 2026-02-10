@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <base href="/">
+
+
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+  <meta name="description" content="Crypto Entry Signals">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Crypto Entry Signals</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+</head>
+
+<body>
+
+  <!-- Flutter bootstrap FIRST -->
+  <script src="flutter_bootstrap.js"></script>
+
+  <!-- OneSignal load AFTER Flutter engine -->
+  <script>
+    window.addEventListener("flutter-first-frame", function () {
+      if (location.hostname === "www.cryptosignal.site") {
+        const s = document.createElement("script");
+        s.src = "https://cdn.onesignal.com/sdks/OneSignalSDK.js";
+        s.defer = true;
+        document.head.appendChild(s);
+
+        s.onload = function () {
+          window.OneSignal = window.OneSignal || [];
+          OneSignal.push(function () {
+            OneSignal.init({
+              appId: "75d863af-e24a-4852-bf25-92fa3fc8ae94",
+            });
+          });
+        };
+      }
+    });
+  </script>
+
+</body>
+</html>
