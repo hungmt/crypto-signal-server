@@ -91,10 +91,27 @@ app.post("/favorites", async (req, res) => {
 });
 
 app.delete("/favorites/:symbol", (req, res) => {
-  const favs = getFavorites().filter(s => s !== req.params.symbol);
+  const symbol = req.params.symbol;
+
+  // 1. Xóa khỏi favorites.json
+  const favs = getFavorites().filter(s => s !== symbol);
   fs.writeFileSync("favorites.json", JSON.stringify(favs));
+
+  // 2. Xóa khỏi cache RAM
+  delete signalsCache[symbol];
+  delete lastKlineFetch[symbol];
+
+  for (const tf of INTERVALS) {
+    delete lastPushedSignal[`${symbol}_${tf}`];
+    delete lastPushedSignal[`${symbol}_${tf}_candle`];
+  }
+
+  // 3. Ghi lại signals.json ngay
+  fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
+
   res.json(favs);
 });
+
 loadSymbols();
 // 👇 CRON sẽ gọi API này
 app.get("/scan", async (req, res) => {

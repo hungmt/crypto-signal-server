@@ -3,8 +3,14 @@ const { RSI, ATR } = require("technicalindicators");
 const fs = require("fs");
 const { pushSignal } = require("./notifier");
 
-const signalsCache = {};
 const INTERVALS = ["15m", "1h", "2h", "4h", "1d"];
+
+const signalsCache = {};
+const lastPushedSignal = {};
+const indicatorCache = {};
+const lastIndicatorBucket = {};
+
+let priceMap = {};
 
 // ================= FAVORITES =================
 function getFavorites() {
@@ -16,6 +22,35 @@ function getFavorites() {
   }
 }
 
+// ================= LOAD ALL PRICES (1 REQUEST) =================
+async function loadAllPrices() {
+  const { data } = await axios.get(
+    "https://api.binance.com/api/v3/ticker/price"
+  );
+  for (const p of data) {
+    priceMap[p.symbol] = Number(p.price);
+  }
+}
+
+// ================= CHECK NEW CLOSED CANDLE (PER TF) =================
+function hasNewClosedCandle(tf) {
+  const tfMs = {
+    "15m": 15 * 60 * 1000,
+    "1h": 60 * 60 * 1000,
+    "2h": 2 * 60 * 60 * 1000,
+    "4h": 4 * 60 * 60 * 1000,
+    "1d": 24 * 60 * 60 * 1000,
+  }[tf];
+
+  const bucket = Math.floor(Date.now() / tfMs);
+
+  if (lastIndicatorBucket[tf] !== bucket) {
+    lastIndicatorBucket[tf] = bucket;
+    return true;
+  }
+  return false;
+}
+
 // ================= KLINES =================
 async function getKlines(symbol, interval, limit = 300) {
   const { data } = await axios.get(
@@ -23,8 +58,6 @@ async function getKlines(symbol, interval, limit = 300) {
   );
 
   return data.map(k => ({
-    time: k[0],
-    open: Number(k[1]),
     high: Number(k[2]),
     low: Number(k[3]),
     close: Number(k[4]),
@@ -33,18 +66,12 @@ async function getKlines(symbol, interval, limit = 300) {
 
 // ================= ATR =================
 function calcATR(klines) {
-  const highs = klines.map(k => k.high);
-  const lows = klines.map(k => k.low);
-  const closes = klines.map(k => k.close);
-
-  const arr = ATR.calculate({
-    high: highs,
-    low: lows,
-    close: closes,
+  return ATR.calculate({
+    high: klines.map(k => k.high),
+    low: klines.map(k => k.low),
+    close: klines.map(k => k.close),
     period: 14,
-  });
-
-  return arr.length ? arr.at(-1) : 0;
+  }).at(-1) || 0;
 }
 
 function atrMultiplier(tf) {
@@ -83,129 +110,116 @@ function envelope(nwLine, values, mult = 2) {
   };
 }
 
-// ================= TRADE =================
+// ================= UPDATE INDICATORS (ONLY WHEN NEW CANDLE) =================
+async function updateIndicators(symbol, tf) {
+  const klines = await getKlines(symbol, tf);
+
+  const closes = klines.slice(0, -1).map(k => k.close);
+
+  const rsi = RSI.calculate({ values: closes, period: 14 }).at(-1);
+  const nwLine = nw(closes);
+  const { upper, lower } = envelope(nwLine, closes);
+  const atr = calcATR(klines);
+
+  if (!indicatorCache[symbol]) indicatorCache[symbol] = {};
+
+  indicatorCache[symbol][tf] = {
+    rsi,
+    upper: upper.at(-1),
+    lower: lower.at(-1),
+    mid: nwLine.at(-1),
+    atr,
+  };
+}
+
+// ================= CALC TRADE =================
 function calcTrade(price, up, lo, mid, atr, tf, signal) {
-  if (!atr || !up || !lo || !mid) {
-    return { entry: null, tp: null, sl: null, rr: null };
-  }
+  if (!atr) return {};
 
   const k = atrMultiplier(tf);
 
   if (signal === "LONG") {
-    const sl = lo - atr * k;
-    const tp = mid;
-    const rr = (tp - price) / (price - sl);
-
-    return { entry: price, tp, sl, rr: Number(rr.toFixed(2)) };
+    return {
+      entry: price,
+      tp: mid,
+      sl: lo - atr * k,
+    };
   }
 
   if (signal === "SHORT") {
-    const sl = up + atr * k;
-    const tp = mid;
-    const rr = (price - tp) / (sl - price);
-
-    return { entry: price, tp, sl, rr: Number(rr.toFixed(2)) };
+    return {
+      entry: price,
+      tp: mid,
+      sl: up + atr * k,
+    };
   }
 
-  return { entry: null, tp: null, sl: null, rr: null };
+  return {};
 }
 
-// ================= PRICE =================
-async function getLivePrice(symbol) {
-  const { data } = await axios.get(
-    `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`
-  );
-  return Number(data.price);
+// ================= CHECK SIGNAL REALTIME =================
+function checkSignalLive(symbol, tf, price) {
+  const c = indicatorCache?.[symbol]?.[tf];
+  if (!c) return;
+
+  let signal = "WAIT";
+
+  if (price < c.lower && c.rsi < 35) signal = "LONG";
+  else if (price > c.upper && c.rsi > 65) signal = "SHORT";
+
+  const trade = calcTrade(price, c.upper, c.lower, c.mid, c.atr, tf, signal);
+
+  signalsCache[symbol][tf] = {
+    symbol,
+    interval: tf,
+    price,
+    rsi: Number(c.rsi.toFixed(2)),
+    signal,
+    ...trade,
+    time: Date.now(),
+  };
 }
 
-// ================= CORE =================
-async function processSymbol(symbol) {
-  if (!signalsCache[symbol]) signalsCache[symbol] = {};
+// ================= SCAN NOW (CRON EACH MINUTE) =================
+async function scanNow() {
+  await loadAllPrices(); // 1 request
 
-  const livePrice = await getLivePrice(symbol);
-
-  for (const tf of INTERVALS) {
-    try {
-      const klines = await getKlines(symbol, tf);
-
-      // bỏ nến đang chạy
-      const closed = klines.slice(0, -1);
-      const closes = closed.map(k => k.close);
-      const lastClosedTime = closed.at(-1).time;
-
-      // nếu nến chưa đổi → chỉ update giá
-      if (
-        signalsCache[symbol][tf] &&
-        signalsCache[symbol][tf].lastClosedTime === lastClosedTime
-      ) {
-        signalsCache[symbol][tf].price = livePrice;
-        continue;
-      }
-
-      const rsi = RSI.calculate({ values: closes, period: 14 }).at(-1);
-
-      const nwLine = nw(closes);
-      const { upper, lower } = envelope(nwLine, closes);
-
-      const idx = closes.length - 1;
-      const up = upper[idx];
-      const lo = lower[idx];
-      const mid = nwLine[idx];
-
-      let signal = "WAIT";
-      if (livePrice < lo && rsi < 35) signal = "LONG";
-      else if (livePrice > up && rsi > 65) signal = "SHORT";
-
-      const atr = calcATR(klines);
-      const trade = calcTrade(livePrice, up, lo, mid, atr, tf, signal);
-
-      const prev = signalsCache[symbol][tf]?.signal || "WAIT";
-
-      signalsCache[symbol][tf] = {
-        symbol,
-        interval: tf,
-        price: livePrice,
-        entry: trade.entry,
-        tp: trade.tp,
-        sl: trade.sl,
-        rsi: Number(rsi.toFixed(2)),
-        upper: up,
-        lower: lo,
-        signal,
-        lastClosedTime,
-        time: Date.now(),
-      };
-
-
-      if (signal !== "WAIT" && signal !== prev) {
-        await pushSignal(signalsCache[symbol][tf]);
-        console.log("🚨", symbol, tf, signal);
-      } else {
-       // await pushSignal(signalsCache[symbol][tf]);
-        console.log("No change test push:", symbol, tf, signal, prev);
-      }
-    } catch (e) {
-      console.log("Error", symbol, tf, e.message);
-    }
-  }
-}
-
-// ================= LOOP =================
-async function loop() {
   const favs = getFavorites();
 
-  for (const s of favs) {
-    await processSymbol(s);
+  for (const tf of INTERVALS) {
+    const needUpdate = hasNewClosedCandle(tf);
+
+    for (const symbol of favs) {
+      try {
+        if (!signalsCache[symbol]) signalsCache[symbol] = {};
+
+        if (needUpdate) {
+          await updateIndicators(symbol, tf);
+        }
+
+        const price = priceMap[symbol];
+        checkSignalLive(symbol, tf, price);
+
+        // ===== PUSH ONLY WHEN STATE CHANGES =====
+        const key = `${symbol}_${tf}`;
+        const curr = signalsCache[symbol][tf]?.signal || "WAIT";
+        const prev = lastPushedSignal[key] || "WAIT";
+
+        if (curr !== prev) {
+          lastPushedSignal[key] = curr;
+
+          if (curr !== "WAIT") {
+            await pushSignal(signalsCache[symbol][tf]);
+            console.log("🚨 PUSH", symbol, tf, curr);
+          }
+        }
+      } catch (e) {
+        console.log("Error", symbol, tf, e.message);
+      }
+    }
   }
 
   fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
-  setTimeout(loop, 60 * 1000);
 }
 
-// ================= SCAN NOW =================
-async function scanNow(symbol) {
-  await processSymbol(symbol);
-  fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
-}
-
-module.exports = { signalsCache, scanNow };
+module.exports = { scanNow, signalsCache };

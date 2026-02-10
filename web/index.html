@@ -1,47 +1,46 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base href="$FLUTTER_BASE_HREF">
+ <base href="/">
+
 
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=Edge">
   <meta name="description" content="Crypto Entry Signals">
 
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="crypto_signal_web">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>Crypto Entry Signals</title>
-  <meta property="og:title" content="Crypto Entry Signals">
-  <meta property="og:description" content="Realtime RSI + LuxAlgo signals for Binance, MEXC...">
-
-  <!-- ✅ OneSignal LOAD FIRST -->
-  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"></script>
-  <script>
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    OneSignalDeferred.push(async function(OneSignal) {
-      await OneSignal.init({
-        appId: "75d863af-e24a-4852-bf25-92fa3fc8ae94",
-
-        serviceWorkerPath: "/OneSignalSDKWorker.js",
-        serviceWorkerUpdaterPath: "/OneSignalSDKUpdaterWorker.js",
-
-        // BẮT BUỘC khác scope Flutter
-        serviceWorkerParam: { scope: "/onesignal/" },
-      });
-    });
-  </script>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="favicon.png"/>
 </head>
 
 <body>
-  <!-- ✅ Flutter LOAD SAU, KHÔNG async -->
-   <script>
-  window.flutterConfiguration = {
-    serviceWorker: null
-  };
-</script>
+
+  <!-- Flutter bootstrap FIRST -->
   <script src="flutter_bootstrap.js"></script>
+
+  <!-- OneSignal load AFTER Flutter engine -->
+  <script>
+    window.addEventListener("flutter-first-frame", function () {
+      if (location.hostname === "www.cryptosignal.site") {
+        const s = document.createElement("script");
+        s.src = "https://cdn.onesignal.com/sdks/OneSignalSDK.js";
+        s.defer = true;
+        document.head.appendChild(s);
+
+        s.onload = function () {
+          window.OneSignal = window.OneSignal || [];
+          OneSignal.push(function () {
+            OneSignal.init({
+              appId: "75d863af-e24a-4852-bf25-92fa3fc8ae94",
+            });
+          });
+        };
+      }
+    });
+  </script>
+
 </body>
 </html>
