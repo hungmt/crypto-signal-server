@@ -5,14 +5,39 @@ const { pushSignal } = require("./notifier");
 
 const INTERVALS = ["15m", "1h", "2h", "4h", "1d"];
 
+/* ================= AXIOS SAFE ================= */
+
+const axiosInstance = axios.create({
+  timeout: 10000,
+  headers: {
+    "User-Agent": "Mozilla/5.0",
+    Accept: "application/json"
+  }
+});
+
+async function safeGet(url) {
+  try {
+    return await axiosInstance.get(url);
+  } catch (e) {
+    if (e.response?.status === 418) {
+      console.log("⚠️ Binance 418 → retry");
+      await new Promise(r => setTimeout(r, 2000));
+      return axiosInstance.get(url);
+    }
+    throw e;
+  }
+}
+
+/* ================= CACHE ================= */
+
 const signalsCache = {};
 const lastPushedSignal = {};
 const indicatorCache = {};
 const lastIndicatorBucket = {};
-
 let priceMap = {};
 
-// ================= FAVORITES =================
+/* ================= FAVORITES ================= */
+
 function getFavorites() {
   try {
     const favs = JSON.parse(fs.readFileSync("favorites.json"));
@@ -22,17 +47,20 @@ function getFavorites() {
   }
 }
 
-// ================= LOAD ALL PRICES (1 REQUEST) =================
+/* ================= LOAD ALL PRICE ================= */
+
 async function loadAllPrices() {
-  const { data } = await axios.get(
+  const { data } = await safeGet(
     "https://api.binance.com/api/v3/ticker/price"
   );
+
   for (const p of data) {
     priceMap[p.symbol] = Number(p.price);
   }
 }
 
-// ================= CHECK NEW CLOSED CANDLE (PER TF) =================
+/* ================= TF BUCKET ================= */
+
 function hasNewClosedCandle(tf) {
   const tfMs = {
     "15m": 15 * 60 * 1000,
@@ -51,9 +79,10 @@ function hasNewClosedCandle(tf) {
   return false;
 }
 
-// ================= KLINES =================
+/* ================= KLINES ================= */
+
 async function getKlines(symbol, interval, limit = 300) {
-  const { data } = await axios.get(
+  const { data } = await safeGet(
     `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
   );
 
@@ -64,7 +93,8 @@ async function getKlines(symbol, interval, limit = 300) {
   }));
 }
 
-// ================= ATR =================
+/* ================= ATR ================= */
+
 function calcATR(klines) {
   return ATR.calculate({
     high: klines.map(k => k.high),
@@ -84,19 +114,24 @@ function atrMultiplier(tf) {
   }[tf] || 1.5;
 }
 
-// ================= NW ENVELOPE =================
+/* ================= NW ================= */
+
 function nw(values, h = 8, window = 60) {
   const out = [];
+
   for (let i = 0; i < values.length; i++) {
     let num = 0, den = 0;
     const start = Math.max(0, i - window);
+
     for (let j = start; j <= i; j++) {
       const w = Math.exp(-((i - j) ** 2) / (2 * h * h));
       num += values[j] * w;
       den += w;
     }
+
     out.push(num / den);
   }
+
   return out;
 }
 
@@ -110,10 +145,10 @@ function envelope(nwLine, values, mult = 2) {
   };
 }
 
-// ================= UPDATE INDICATORS (ONLY WHEN NEW CANDLE) =================
+/* ================= UPDATE INDICATOR ================= */
+
 async function updateIndicators(symbol, tf) {
   const klines = await getKlines(symbol, tf);
-
   const closes = klines.slice(0, -1).map(k => k.close);
 
   const rsi = RSI.calculate({ values: closes, period: 14 }).at(-1);
@@ -132,32 +167,26 @@ async function updateIndicators(symbol, tf) {
   };
 }
 
-// ================= CALC TRADE =================
+/* ================= TRADE ================= */
+
 function calcTrade(price, up, lo, mid, atr, tf, signal) {
   if (!atr) return {};
 
   const k = atrMultiplier(tf);
 
   if (signal === "LONG") {
-    return {
-      entry: price,
-      tp: mid,
-      sl: lo - atr * k,
-    };
+    return { entry: price, tp: mid, sl: lo - atr * k };
   }
 
   if (signal === "SHORT") {
-    return {
-      entry: price,
-      tp: mid,
-      sl: up + atr * k,
-    };
+    return { entry: price, tp: mid, sl: up + atr * k };
   }
 
   return {};
 }
 
-// ================= CHECK SIGNAL REALTIME =================
+/* ================= SIGNAL ================= */
+
 function checkSignalLive(symbol, tf, price) {
   const c = indicatorCache?.[symbol]?.[tf];
   if (!c) return;
@@ -180,17 +209,20 @@ function checkSignalLive(symbol, tf, price) {
   };
 }
 
-// ================= SCAN NOW (CRON EACH MINUTE) =================
-async function scanNow() {
-  await loadAllPrices(); // 1 request
+/* ================= SCAN ================= */
 
+async function scanNow() {
+
+  await loadAllPrices();
   const favs = getFavorites();
 
   for (const tf of INTERVALS) {
+
     const needUpdate = hasNewClosedCandle(tf);
 
     for (const symbol of favs) {
       try {
+
         if (!signalsCache[symbol]) signalsCache[symbol] = {};
 
         if (needUpdate) {
@@ -200,7 +232,6 @@ async function scanNow() {
         const price = priceMap[symbol];
         checkSignalLive(symbol, tf, price);
 
-        // ===== PUSH ONLY WHEN STATE CHANGES =====
         const key = `${symbol}_${tf}`;
         const curr = signalsCache[symbol][tf]?.signal || "WAIT";
         const prev = lastPushedSignal[key] || "WAIT";
@@ -213,6 +244,7 @@ async function scanNow() {
             console.log("🚨 PUSH", symbol, tf, curr);
           }
         }
+
       } catch (e) {
         console.log("Error", symbol, tf, e.message);
       }

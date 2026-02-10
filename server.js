@@ -74,19 +74,16 @@ app.get("/signals", (req, res) => {
 });
 
 
-app.get("/favorites", (req, res) => {
-  res.json(getFavorites());
-});
+app.post("/favorites", (req, res) => {
 
-app.post("/favorites", async (req, res) => {
   const { symbol } = req.body;
   const favs = getFavorites();
+
   if (!favs.includes(symbol) && favs.length < 10) {
     favs.push(symbol);
     fs.writeFileSync("favorites.json", JSON.stringify(favs));
-    // 🔥 QUAN TRỌNG: scan ngay
-    await scanNow(symbol);
   }
+
   res.json(favs);
 });
 
@@ -115,24 +112,22 @@ app.delete("/favorites/:symbol", (req, res) => {
 loadSymbols();
 // 👇 CRON sẽ gọi API này
 app.get("/scan", async (req, res) => {
+
   console.log("⏰ CRON SCAN START");
 
   try {
-    const favs = JSON.parse(fs.readFileSync("favorites.json"));
 
-    for (const s of favs) {
-      await scanNow(s);
-    }
-
-    fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
+    await scanNow();
 
     console.log("✅ SCAN DONE");
     res.send("OK");
+
   } catch (e) {
     console.log(e.message);
     res.status(500).send("Error");
   }
 });
+
 //app.listen(3000, () => console.log("API running 3000"));
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("API running on", PORT));
