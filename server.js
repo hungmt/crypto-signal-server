@@ -61,22 +61,25 @@ app.get("/favorites", (req, res) => {
 
 // 🔹 add favorite
 app.post("/favorites", async (req, res) => {
-  const { symbol } = req.body;
-  const favs = getFavorites();
+  try {
+    const { symbol } = req.body;
+    const favs = getFavorites();
 
-  if (!favs.includes(symbol) && favs.length < 20) {
-    favs.push(symbol);
-    fs.writeFileSync("favorites.json", JSON.stringify(favs));
+    if (!favs.includes(symbol) && favs.length < 20) {
+      favs.push(symbol);
+      fs.writeFileSync("favorites.json", JSON.stringify(favs));
 
-    // ⭐ preload giống bootstrap
-    await initSymbol(symbol, true);
+      await initSymbol(symbol, true);
+      await new Promise(r => setTimeout(r, 1500));
+    }
 
-    // ⭐ đợi 1 nhịp cho indicators tính xong
-    await new Promise(r => setTimeout(r, 1500));
+    res.json(favs);
+  } catch (e) {
+    console.error("ADD FAVORITE ERROR:", e);
+    res.status(500).send("ERROR");
   }
-
-  res.json(favs);
 });
+
 
 // 🔹 remove favorite
 app.delete("/favorites/:symbol", (req, res) => {

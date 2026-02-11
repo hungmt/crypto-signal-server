@@ -114,9 +114,10 @@ async function updateIndicators(symbol, tf) {
 async function preloadKlinesSafe(symbol, tf) {
   await new Promise(r => setTimeout(r, 500)); // chống rate limit
 
-  const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${tf}&limit=60`;
-  const res = await fetch(url);
-  const data = await res.json();
+  const { data } = await axios.get(
+    "https://fapi.binance.com/fapi/v1/klines",
+    { params: { symbol, interval: tf, limit: 60 } }
+  );
 
   if (!klineCache[symbol]) klineCache[symbol] = {};
   if (!klineCache[symbol][tf]) {
