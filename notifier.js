@@ -1,6 +1,7 @@
 const axios = require("axios");
 const fs = require("fs");
-
+const { sendTelegram } = require("./telegram");
+const { postTweet } = require("./twitter");
 const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
 const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY;
 
@@ -85,6 +86,10 @@ SL: ${data.sl ?? "-"}`,
     markPushed(key);
 
     console.log("✅ PUSH SENT:", key);
+    await sendTelegram(msg);
+  await postTweet(msg);
+
+  console.log("📣 Social posted:", data.symbol);
   } catch (e) {
     console.log("❌ Push error:", e.response?.data || e.message);
   }
