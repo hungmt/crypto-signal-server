@@ -51,10 +51,20 @@ Future<List<dynamic>> fetchSignals(String interval) async {
   );
 
   if (res.statusCode == 200) {
-    final Map<String, dynamic> data = jsonDecode(res.body);
+    final Map<String, dynamic> raw =
+        jsonDecode(res.body) as Map<String, dynamic>;
 
-    /// server trả về dạng Map {BTCUSDT: {...}}
-    return data.values.toList();
+    List<dynamic> list = [];
+
+    raw.forEach((symbol, tfs) {
+      final tfMap = Map<String, dynamic>.from(tfs);
+
+      if (tfMap.containsKey(interval)) {
+        list.add(tfMap[interval]);
+      }
+    });
+
+    return list;
   }
 
   return [];

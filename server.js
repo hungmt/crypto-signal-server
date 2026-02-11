@@ -67,7 +67,12 @@ app.post("/favorites", async (req, res) => {
   if (!favs.includes(symbol) && favs.length < 20) {
     favs.push(symbol);
     fs.writeFileSync("favorites.json", JSON.stringify(favs));
-    await initSymbol(symbol);
+
+    // ⭐ preload giống bootstrap
+    await initSymbol(symbol, true);
+
+    // ⭐ đợi 1 nhịp cho indicators tính xong
+    await new Promise(r => setTimeout(r, 1500));
   }
 
   res.json(favs);
