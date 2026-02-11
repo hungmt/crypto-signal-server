@@ -14,7 +14,7 @@ const signalsCache = fs.existsSync("signals.json")
 
 const indicatorCache = {};
 const priceMap = {};
-
+const klineCache = {};
 /* ================= PRICE STREAM ================= */
 function atrMultiplier(tf) {
   return {
@@ -85,14 +85,37 @@ function startPriceStream() {
 }
 
 /* ================= KLINE SUB ================= */
-
 function subscribeKline(symbol, tf) {
   const stream = `${symbol.toLowerCase()}@kline_${tf}`;
   const ws = new WebSocket(`wss://fstream.binance.com/ws/${stream}`);
 
-  ws.on("message", async (msg) => {
+  ws.on("message", (msg) => {
     const k = JSON.parse(msg).k;
-    if (k.x) await updateIndicators(symbol, tf);
+    if (!k.x) return; // chỉ khi nến đóng
+
+    if (!klineCache[symbol]) klineCache[symbol] = {};
+    if (!klineCache[symbol][tf]) klineCache[symbol][tf] = [];
+
+    const arr = klineCache[symbol][tf];
+
+    arr.push(Number(k.c));
+    if (arr.length > 200) arr.shift();
+
+    if (arr.length < 50) return;
+
+    const rsi = RSI.calculate({ values: arr, period: 14 }).at(-1);
+
+    const max = Math.max(...arr.slice(-50));
+    const min = Math.min(...arr.slice(-50));
+
+    if (!indicatorCache[symbol]) indicatorCache[symbol] = {};
+    indicatorCache[symbol][tf] = {
+      rsi,
+      upper: max,
+      lower: min,
+    };
+
+    checkSignal(symbol, tf); // hàm bạn đang có
   });
 
   ws.on("close", () =>
@@ -207,17 +230,32 @@ function checkSignal(symbol, tf) {
   fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
 }
 
+function subscribePrice(symbol) {
+  const ws = new WebSocket(
+    `wss://fstream.binance.com/ws/${symbol.toLowerCase()}@markPrice`
+  );
 
+  ws.on("message", (msg) => {
+    const data = JSON.parse(msg);
+    priceMap[symbol] = Number(data.p);
+  });
+
+  ws.on("close", () =>
+    setTimeout(() => subscribePrice(symbol), 2000)
+  );
+}
 /* ================= INIT SYMBOL ================= */
 
 async function initSymbol(symbol) {
   if (!signalsCache[symbol]) signalsCache[symbol] = {};
 
+  subscribePrice(symbol); // ⭐ QUAN TRỌNG
+
   for (const tf of INTERVALS) {
-    await updateIndicators(symbol, tf);
     subscribeKline(symbol, tf);
   }
 }
+
 
 /* ================= LOOP ================= */
 
