@@ -4,6 +4,8 @@ const cors = require("cors");
 const fs = require("fs");
 const axios = require("axios");
 const { signalsCache, initSymbol } = require("./alertEngine");
+const loadSymbols = require("./loadSymbols");
+
 const seoSymbols = require("./seoSymbols.json");
 const app = express();
 app.use(cors());
@@ -23,28 +25,7 @@ setInterval(() => {
 
 /* ================= SYMBOL CACHE FUTURES ================= */
 
-let SYMBOL_CACHE = [];
 
-async function loadSymbols() {
-  try {
-    const { data } = await axios.get(
-      "https://fapi.binance.com/fapi/v1/exchangeInfo"
-    );
-
-    SYMBOL_CACHE = data.symbols
-      .filter(
-        s =>
-          s.status === "TRADING" &&
-          s.contractType === "PERPETUAL" &&
-          s.quoteAsset === "USDT"
-      )
-      .map(s => s.symbol);
-
-    console.log("Loaded futures symbols:", SYMBOL_CACHE.length);
-  } catch (e) {
-    console.log("Load symbols error:", e.message);
-  }
-}
 
 /* ================= FAVORITES ================= */
 
@@ -120,7 +101,7 @@ app.get("/signals", (req, res) => {
 /* ================= START ================= */
 
 const PORT = process.env.PORT || 3000;
-
+let SYMBOL_CACHE = [];
 app.listen(PORT, () => {
   console.log("Server running on", PORT);
 
@@ -132,7 +113,7 @@ async function bootstrap() {
   try {
     console.log("Bootstrapping...");
 
-    await loadSymbols();
+     SYMBOL_CACHE = await loadSymbols();
 
     const favs = getFavorites();
 
