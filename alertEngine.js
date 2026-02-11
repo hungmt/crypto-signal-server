@@ -282,17 +282,15 @@ function subscribePrice(symbol) {
 
 /* ================= INIT SYMBOL ================= */
 
-async function initSymbol(symbol) {
-  subscribePrice(symbol);
+function initSymbol(symbol) {
 
-  for (const tf of INTERVALS) {
-    subscribeKline(symbol, tf);
+  if (!signalsCache[symbol]) {
+    signalsCache[symbol] = {};   // <<< QUAN TRỌNG NHẤT
   }
+
+  startPriceStream(symbol);
+  intervals.forEach(tf => subscribeKline(symbol, tf));
 }
-
-
-
-
 
 /* ================= LOOP ================= */
 
