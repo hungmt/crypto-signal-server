@@ -85,43 +85,6 @@ function startPriceStream() {
 }
 
 /* ================= KLINE SUB ================= */
-function subscribeKline(symbol, tf) {
-  const stream = `${symbol.toLowerCase()}@kline_${tf}`;
-  const ws = new WebSocket(`wss://fstream.binance.com/ws/${stream}`);
-
-  ws.on("message", (msg) => {
-    const k = JSON.parse(msg).k;
-    if (!k.x) return; // chỉ khi nến đóng
-
-    if (!klineCache[symbol]) klineCache[symbol] = {};
-    if (!klineCache[symbol][tf]) klineCache[symbol][tf] = [];
-
-    const arr = klineCache[symbol][tf];
-
-    arr.push(Number(k.c));
-    if (arr.length > 200) arr.shift();
-
-    if (arr.length < 50) return;
-
-    const rsi = RSI.calculate({ values: arr, period: 14 }).at(-1);
-
-    const max = Math.max(...arr.slice(-50));
-    const min = Math.min(...arr.slice(-50));
-
-    if (!indicatorCache[symbol]) indicatorCache[symbol] = {};
-    indicatorCache[symbol][tf] = {
-      rsi,
-      upper: max,
-      lower: min,
-    };
-
-    checkSignal(symbol, tf); // hàm bạn đang có
-  });
-
-  ws.on("close", () =>
-    setTimeout(() => subscribeKline(symbol, tf), 2000)
-  );
-}
 
 /* ================= FETCH KLINES ================= */
 
@@ -230,6 +193,41 @@ function checkSignal(symbol, tf) {
   fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
 }
 
+function subscribeKline(symbol, tf) {
+  const stream = `${symbol.toLowerCase()}@kline_${tf}`;
+  const ws = new WebSocket(`wss://fstream.binance.com/ws/${stream}`);
+
+  ws.on("message", (msg) => {
+    const k = JSON.parse(msg).k;
+    if (!k.x) return;
+
+    if (!klineCache[symbol]) klineCache[symbol] = {};
+    if (!klineCache[symbol][tf]) klineCache[symbol][tf] = [];
+
+    const arr = klineCache[symbol][tf];
+
+    arr.push(Number(k.c));
+    if (arr.length > 200) arr.shift();
+    if (arr.length < 50) return;
+
+    const rsi = RSI.calculate({ values: arr, period: 14 }).at(-1);
+    const max = Math.max(...arr.slice(-50));
+    const min = Math.min(...arr.slice(-50));
+
+    // ⭐⭐⭐ CHỖ QUAN TRỌNG
+    signalsCache[symbol][tf].rsi = rsi;
+    signalsCache[symbol][tf].upper = max;
+    signalsCache[symbol][tf].lower = min;
+
+    checkSignal(symbol, tf);
+  });
+
+  ws.on("close", () =>
+    setTimeout(() => subscribeKline(symbol, tf), 2000)
+  );
+}
+
+
 function subscribePrice(symbol) {
   const ws = new WebSocket(
     `wss://fstream.binance.com/ws/${symbol.toLowerCase()}@markPrice`
@@ -237,13 +235,20 @@ function subscribePrice(symbol) {
 
   ws.on("message", (msg) => {
     const data = JSON.parse(msg);
-    priceMap[symbol] = Number(data.p);
+    const price = Number(data.p);
+
+    for (const tf of INTERVALS) {
+      if (signalsCache[symbol]?.[tf]) {
+        signalsCache[symbol][tf].price = price;
+      }
+    }
   });
 
   ws.on("close", () =>
     setTimeout(() => subscribePrice(symbol), 2000)
   );
 }
+
 /* ================= INIT SYMBOL ================= */
 
 async function initSymbol(symbol) {
