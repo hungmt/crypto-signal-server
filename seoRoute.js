@@ -2,8 +2,8 @@ const fs = require("fs");
 const path = require("path");
 
 function seoRoute(app) {
-  app.get("/:slug", (req, res) => {
-    const slug = "/" + req.params.slug;
+ app.get("/h/:slug", (req, res) => {
+    const slug = "/h/" + req.params.slug;
 
     let history = [];
     try {

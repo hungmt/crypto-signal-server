@@ -11,7 +11,7 @@ app.use(express.json());
 
 /* ================= KEEP RENDER AWAKE ================= */
 const seoRoute = require("./seoRoute");
-seoRoute(app);
+
 
 const SELF_URL = "https://crypto-signal-server.onrender.com/health";
 
@@ -150,4 +150,5 @@ async function bootstrap() {
     console.error("Bootstrap error", e);
   }
 }
+seoRoute(app);
 
