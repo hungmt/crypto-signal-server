@@ -282,15 +282,31 @@ function subscribePrice(symbol) {
 
 /* ================= INIT SYMBOL ================= */
 
-function initSymbol(symbol) {
+async function initSymbol(symbol) {
+  if (!signalsCache[symbol]) signalsCache[symbol] = {};
+  if (!klineCache[symbol]) klineCache[symbol] = {};
 
-  if (!signalsCache[symbol]) {
-    signalsCache[symbol] = {};   // <<< QUAN TRỌNG NHẤT
+  subscribePrice(symbol);
+
+  for (const tf of INTERVALS) {
+    signalsCache[symbol][tf] = {
+      symbol,
+      interval: tf,
+      signal: "WAIT",
+      price: 0,
+      rsi: 0,
+      entry: null,
+      tp: null,
+      sl: null,
+      time: Date.now(),
+    };
+
+    subscribeKline(symbol, tf);
   }
 
-  startPriceStream(symbol);
-  intervals.forEach(tf => subscribeKline(symbol, tf));
+  console.log("✅ Init symbol:", symbol);
 }
+
 
 /* ================= LOOP ================= */
 
