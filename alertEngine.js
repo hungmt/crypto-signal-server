@@ -126,7 +126,8 @@ async function preloadKlinesSafe(symbol, tf) {
 
 function checkSignal(symbol, tf) {
   const price = priceMap[symbol];
-  const c = indicatorCache?.[symbol]?.[tf];
+  const c = signalsCache?.[symbol]?.[tf];
+
   if (!price || !c) return;
 
   if (!signalsCache[symbol]) signalsCache[symbol] = {};
