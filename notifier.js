@@ -1,10 +1,43 @@
 const axios = require("axios");
+const fs = require("fs");
 
 const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
 const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY;
 
+const PUSH_LOG_FILE = "pushlog.json";
+
+// lưu lịch sử push để chống trùng
+let pushLog = {};
+if (fs.existsSync(PUSH_LOG_FILE)) {
+  pushLog = JSON.parse(fs.readFileSync(PUSH_LOG_FILE));
+}
+
+function shouldPush(key) {
+  const now = Date.now();
+
+  // cooldown 30 phút cho cùng 1 signal
+  const COOLDOWN = 30 * 60 * 1000;
+
+  if (!pushLog[key]) return true;
+
+  return now - pushLog[key] > COOLDOWN;
+}
+
+function markPushed(key) {
+  pushLog[key] = Date.now();
+  fs.writeFileSync(PUSH_LOG_FILE, JSON.stringify(pushLog));
+}
+
 async function pushSignal(data) {
   try {
+    // KEY DUY NHẤT CHO MỖI TÍN HIỆU
+    const key = `${data.symbol}_${data.interval}_${data.signal}`;
+
+    if (!shouldPush(key)) {
+      console.log("⏭ Skip duplicate push:", key);
+      return;
+    }
+
     await axios.post(
       "https://onesignal.com/api/v1/notifications",
       {
@@ -49,11 +82,12 @@ SL: ${data.sl ?? "-"}`,
       }
     );
 
-    console.log("✅ PUSH SENT:", data.symbol, data.interval);
+    markPushed(key);
+
+    console.log("✅ PUSH SENT:", key);
   } catch (e) {
     console.log("❌ Push error:", e.response?.data || e.message);
   }
 }
-
 
 module.exports = { pushSignal };
