@@ -119,13 +119,28 @@ app.get("/signals", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log("Server running on", PORT);
 
-  await loadSymbols();
-
-  const favs = getFavorites();
-  for (const s of favs) {
-    await initSymbol(s);
-  }
+  // chạy nền, không await
+  bootstrap();
 });
+
+async function bootstrap() {
+  try {
+    console.log("Bootstrapping...");
+
+    await loadSymbols();
+
+    const favs = getFavorites();
+
+    for (const s of favs) {
+      initSymbol(s); // KHÔNG await
+    }
+
+    console.log("Bootstrap done");
+  } catch (e) {
+    console.error("Bootstrap error", e);
+  }
+}
+
