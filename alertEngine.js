@@ -249,13 +249,26 @@ function subscribePrice(symbol) {
 async function initSymbol(symbol) {
   if (!signalsCache[symbol]) signalsCache[symbol] = {};
 
-  subscribePrice(symbol); // ⭐ QUAN TRỌNG
+  subscribePrice(symbol);
 
   for (const tf of INTERVALS) {
+    signalsCache[symbol][tf] = {
+      symbol,
+      interval: tf,
+      signal: "WAIT",
+      price: 0,
+      rsi: 0,
+      entry: null,
+      tp: null,
+      sl: null,
+      time: Date.now(),
+    };
+
     subscribeKline(symbol, tf);
   }
-}
 
+  console.log("✅ Init symbol:", symbol);
+}
 
 /* ================= LOOP ================= */
 
