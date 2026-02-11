@@ -119,7 +119,9 @@ async function preloadKlinesSafe(symbol, tf) {
   const data = await res.json();
 
   if (!klineCache[symbol]) klineCache[symbol] = {};
-  klineCache[symbol][tf] = data.map(k => Number(k[4]));
+  if (!klineCache[symbol][tf]) {
+    klineCache[symbol][tf] = data.map(k => Number(k[4]));
+  }
 }
 
 function checkSignal(symbol, tf) {
@@ -177,9 +179,9 @@ function checkSignal(symbol, tf) {
         symbol,
         interval: tf,
         signal,
-        entry,
-        tp,
-        sl,
+        entry: trade.entry,
+        tp: trade.tp,
+        sl: trade.sl,
         rsi: Number(c.rsi.toFixed(2)),
         price,
       });
@@ -212,7 +214,10 @@ function subscribeKline(symbol, tf) {
     if (!k.x) return;
 
     if (!klineCache[symbol]) klineCache[symbol] = {};
-    if (!klineCache[symbol][tf]) klineCache[symbol][tf] = [];
+    if (!klineCache[symbol][tf]) {
+      // ⭐ nếu đã preload thì giữ nguyên
+      klineCache[symbol][tf] = klineCache[symbol][tf] || [];
+    }
 
     const arr = klineCache[symbol][tf];
 
@@ -221,16 +226,30 @@ function subscribeKline(symbol, tf) {
     if (arr.length < 50) return;
 
     const rsi = RSI.calculate({ values: arr, period: 14 }).at(-1);
-    const max = Math.max(...arr.slice(-50));
-    const min = Math.min(...arr.slice(-50));
+    const upper = Math.max(...arr.slice(-50));
+    const lower = Math.min(...arr.slice(-50));
+    const mid = (upper + lower) / 2;
 
-    // ⭐⭐⭐ CHỖ QUAN TRỌNG
+    const atr =
+      arr.slice(-15).reduce((a, b, i, ar) =>
+        i === 0 ? 0 : a + Math.abs(b - ar[i - 1]), 0
+      ) / 14;
+
+    // ⭐ KHỞI TẠO signalsCache nếu chưa có
+    if (!signalsCache[symbol]) signalsCache[symbol] = {};
+    if (!signalsCache[symbol][tf]) {
+      signalsCache[symbol][tf] = { lastSignal: "WAIT" };
+    }
+
     signalsCache[symbol][tf].rsi = rsi;
-    signalsCache[symbol][tf].upper = max;
-    signalsCache[symbol][tf].lower = min;
+    signalsCache[symbol][tf].upper = upper;
+    signalsCache[symbol][tf].lower = lower;
+    signalsCache[symbol][tf].mid = mid;
+    signalsCache[symbol][tf].atr = atr;
 
     checkSignal(symbol, tf);
   });
+
 
   ws.on("close", () =>
     setTimeout(() => subscribeKline(symbol, tf), 2000)
