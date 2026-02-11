@@ -211,20 +211,18 @@ function subscribeKline(symbol, tf) {
   const stream = `${symbol.toLowerCase()}@kline_${tf}`;
   const ws = new WebSocket(`wss://fstream.binance.com/ws/${stream}`);
 
+  if (!klineCache[symbol]) klineCache[symbol] = {};
+  if (!klineCache[symbol][tf]) klineCache[symbol][tf] = [];
+
   ws.on("message", (msg) => {
     const k = JSON.parse(msg).k;
-    if (!k.x) return;
-
-    if (!klineCache[symbol]) klineCache[symbol] = {};
-    if (!klineCache[symbol][tf]) {
-      // ⭐ nếu đã preload thì giữ nguyên
-      klineCache[symbol][tf] = klineCache[symbol][tf] || [];
-    }
 
     const arr = klineCache[symbol][tf];
 
+    // ⭐ LẤY CẢ NẾN CHƯA ĐÓNG để preload cực nhanh
     arr.push(Number(k.c));
     if (arr.length > 200) arr.shift();
+
     if (arr.length < 50) return;
 
     const rsi = RSI.calculate({ values: arr, period: 14 }).at(-1);
@@ -237,26 +235,28 @@ function subscribeKline(symbol, tf) {
         i === 0 ? 0 : a + Math.abs(b - ar[i - 1]), 0
       ) / 14;
 
-    // ⭐ KHỞI TẠO signalsCache nếu chưa có
     if (!signalsCache[symbol]) signalsCache[symbol] = {};
     if (!signalsCache[symbol][tf]) {
       signalsCache[symbol][tf] = { lastSignal: "WAIT" };
     }
 
-    signalsCache[symbol][tf].rsi = rsi;
-    signalsCache[symbol][tf].upper = upper;
-    signalsCache[symbol][tf].lower = lower;
-    signalsCache[symbol][tf].mid = mid;
-    signalsCache[symbol][tf].atr = atr;
+    signalsCache[symbol][tf] = {
+      ...signalsCache[symbol][tf],
+      rsi,
+      upper,
+      lower,
+      mid,
+      atr,
+    };
 
     checkSignal(symbol, tf);
   });
-
 
   ws.on("close", () =>
     setTimeout(() => subscribeKline(symbol, tf), 2000)
   );
 }
+
 
 
 function subscribePrice(symbol) {
@@ -282,17 +282,14 @@ function subscribePrice(symbol) {
 
 /* ================= INIT SYMBOL ================= */
 
-async function initSymbol(symbol, isFavorite = false) {
+async function initSymbol(symbol) {
   subscribePrice(symbol);
 
   for (const tf of INTERVALS) {
-    if (isFavorite) {
-      await preloadKlinesSafe(symbol, tf); // ⭐ CHỈ favorites
-    }
-
     subscribeKline(symbol, tf);
   }
 }
+
 
 
 
