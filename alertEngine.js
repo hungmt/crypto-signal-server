@@ -4,6 +4,7 @@ const fs = require("fs");
 const WebSocket = require("ws");
 const { RSI } = require("technicalindicators");
 const { pushSignal } = require("./notifier");
+const { saveHistory } = require("./saveHistory");
 
 const INTERVALS = ["15m", "1h", "2h", "4h", "1d"];
 
@@ -175,6 +176,16 @@ function checkSignal(symbol, tf) {
         price,
         rsi: Number(c.rsi.toFixed(2)),
         ...trade,
+      });
+      saveHistory({
+        symbol,
+        interval: tf,
+        signal,
+        entry,
+        tp,
+        sl,
+        rsi: Number(c.rsi.toFixed(2)),
+        price,
       });
     }
   }

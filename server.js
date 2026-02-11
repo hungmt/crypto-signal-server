@@ -4,14 +4,16 @@ const cors = require("cors");
 const fs = require("fs");
 const axios = require("axios");
 const { signalsCache, initSymbol } = require("./alertEngine");
-
+const seoSymbols = require("./seoSymbols.json");
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 /* ================= KEEP RENDER AWAKE ================= */
+const seoRoute = require("./seoRoute");
+seoRoute(app);
 
-const SELF_URL = "http://localhost:3000/health";
+const SELF_URL = "https://crypto-signal-server.onrender.com/health";
 
 app.get("/health", (req, res) => res.send("OK"));
 
@@ -137,7 +139,12 @@ async function bootstrap() {
     for (const s of favs) {
       initSymbol(s); // KHÔNG await
     }
-
+ // ⭐ Init riêng cho SEO engine (rất quan trọng)
+  for (const s of seoSymbols) {
+    if (!favs.includes(s)) {
+      await initSymbol(s);
+    }
+  }
     console.log("Bootstrap done");
   } catch (e) {
     console.error("Bootstrap error", e);

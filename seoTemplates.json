@@ -1,0 +1,22 @@
+[
+  {
+    "slug": "{coin}-rsi-{tf}-signal",
+    "title": "{coin} RSI {tf} Trading Signal, Entry, TP, SL",
+    "desc": "Live {coin} RSI {tf} signal with entry price, take profit and stop loss from Binance futures data updated every 15 minutes."
+  },
+  {
+    "slug": "{coin}-long-signal-today",
+    "title": "{coin} Long Signal Today – Futures Entry Zone",
+    "desc": "Latest {coin} long signal with RSI and support resistance levels for futures traders."
+  },
+  {
+    "slug": "{coin}-support-resistance-{tf}",
+    "title": "{coin} Support and Resistance {tf}",
+    "desc": "Auto calculated support and resistance for {coin} on {tf} timeframe using RSI and volatility."
+  },
+  {
+    "slug": "{coin}-futures-trading-signal",
+    "title": "{coin} Futures Trading Signal with Entry, TP, SL",
+    "desc": "Realtime {coin} futures trading signal based on RSI and price action from Binance."
+  }
+]
