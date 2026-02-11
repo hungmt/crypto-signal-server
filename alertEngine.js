@@ -111,7 +111,15 @@ async function updateIndicators(symbol, tf) {
 }
 
 /* ================= SIGNAL ENGINE (STATEFUL) ================= */
+async function preloadKlines(symbol, tf) {
+  const { data } = await axios.get(
+    "https://fapi.binance.com/fapi/v1/klines",
+    { params: { symbol, interval: tf, limit: 200 } }
+  );
 
+  if (!klineCache[symbol]) klineCache[symbol] = {};
+  klineCache[symbol][tf] = data.map(k => Number(k[4]));
+}
 function checkSignal(symbol, tf) {
   const price = priceMap[symbol];
   const c = indicatorCache?.[symbol]?.[tf];
@@ -257,6 +265,8 @@ async function initSymbol(symbol) {
   subscribePrice(symbol);
 
   for (const tf of INTERVALS) {
+    await preloadKlines(symbol, tf); // ⭐ QUAN TRỌNG
+
     signalsCache[symbol][tf] = {
       symbol,
       interval: tf,
@@ -274,6 +284,7 @@ async function initSymbol(symbol) {
 
   console.log("✅ Init symbol:", symbol);
 }
+
 
 /* ================= LOOP ================= */
 

@@ -86,18 +86,15 @@ app.delete("/favorites/:symbol", (req, res) => {
 
 // 🔹 get signals theo timeframe
 app.get("/signals", (req, res) => {
-  const { interval } = req.query;
+  const favs = getFavorites();
   const out = {};
 
-  for (const s in signalsCache) {
-    if (signalsCache[s][interval]) {
-      out[s] = signalsCache[s][interval];
-    }
+  for (const s of favs) {
+    if (signalsCache[s]) out[s] = signalsCache[s];
   }
 
   res.json(out);
 });
-
 /* ================= START ================= */
 
 const PORT = process.env.PORT || 3000;
