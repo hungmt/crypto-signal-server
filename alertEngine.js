@@ -111,15 +111,17 @@ async function updateIndicators(symbol, tf) {
 }
 
 /* ================= SIGNAL ENGINE (STATEFUL) ================= */
-async function preloadKlines(symbol, tf) {
-  const { data } = await axios.get(
-    "https://fapi.binance.com/fapi/v1/klines",
-    { params: { symbol, interval: tf, limit: 200 } }
-  );
+async function preloadKlinesSafe(symbol, tf) {
+  await new Promise(r => setTimeout(r, 500)); // chống rate limit
+
+  const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${tf}&limit=60`;
+  const res = await fetch(url);
+  const data = await res.json();
 
   if (!klineCache[symbol]) klineCache[symbol] = {};
   klineCache[symbol][tf] = data.map(k => Number(k[4]));
 }
+
 function checkSignal(symbol, tf) {
   const price = priceMap[symbol];
   const c = indicatorCache?.[symbol]?.[tf];
@@ -260,30 +262,17 @@ function subscribePrice(symbol) {
 /* ================= INIT SYMBOL ================= */
 
 async function initSymbol(symbol, isFavorite = false) {
-  if (!signalsCache[symbol]) signalsCache[symbol] = {};
-
   subscribePrice(symbol);
 
   for (const tf of INTERVALS) {
     if (isFavorite) {
-      await preloadKlines(symbol, tf); // ⭐ CHỈ favorites
+      await preloadKlinesSafe(symbol, tf); // ⭐ CHỈ favorites
     }
-
-    signalsCache[symbol][tf] = {
-      symbol,
-      interval: tf,
-      signal: "WAIT",
-      price: 0,
-      rsi: 0,
-      entry: null,
-      tp: null,
-      sl: null,
-      time: Date.now(),
-    };
 
     subscribeKline(symbol, tf);
   }
 }
+
 
 
 
