@@ -259,13 +259,15 @@ function subscribePrice(symbol) {
 
 /* ================= INIT SYMBOL ================= */
 
-async function initSymbol(symbol) {
+async function initSymbol(symbol, isFavorite = false) {
   if (!signalsCache[symbol]) signalsCache[symbol] = {};
 
   subscribePrice(symbol);
 
   for (const tf of INTERVALS) {
-    await preloadKlines(symbol, tf); // ⭐ QUAN TRỌNG
+    if (isFavorite) {
+      await preloadKlines(symbol, tf); // ⭐ CHỈ favorites
+    }
 
     signalsCache[symbol][tf] = {
       symbol,
@@ -281,9 +283,8 @@ async function initSymbol(symbol) {
 
     subscribeKline(symbol, tf);
   }
-
-  console.log("✅ Init symbol:", symbol);
 }
+
 
 
 /* ================= LOOP ================= */

@@ -112,17 +112,17 @@ async function bootstrap() {
 
      SYMBOL_CACHE = await loadSymbols();
 
-    const favs = getFavorites();
+   const favs = getFavorites();
 
-    for (const s of favs) {
-      initSymbol(s); // KHÔNG await
-    }
- // ⭐ Init riêng cho SEO engine (rất quan trọng)
-  for (const s of seoSymbols) {
-    if (!favs.includes(s)) {
-      await initSymbol(s);
-    }
+for (const s of favs) {
+  await initSymbol(s, true); // preload
+}
+
+for (const s of seoSymbols) {
+  if (!favs.includes(s)) {
+    initSymbol(s, false); // KHÔNG preload
   }
+}
     console.log("Bootstrap done");
   } catch (e) {
     console.error("Bootstrap error", e);
