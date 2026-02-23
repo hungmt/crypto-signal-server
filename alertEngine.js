@@ -32,86 +32,96 @@ function calcATR(arr) {
   return arr.slice(-15).reduce((a, b, i, ar) =>
     i === 0 ? 0 : a + Math.abs(b - ar[i - 1]), 0) / 14;
 }
+function tfMultiplier(tf) {
+  return {
+    "15m": 0.6,
+    "1h": 1,
+    "4h": 1.8,
+    "1d": 3
+  }[tf] || 1;
+}
 
 /* ================= TRADE LEVELS ================= */
-function calcTrade({ price, lower, upper, signal }) {
+function calcTrade({ price, lower, upper, signal, tf }) {
   if (!price || !lower || !upper) return null;
 
   // ===== LONG =====
   if (signal === "LONG") {
 
-    const fallingKnife = price < lower;
+  const mult = tfMultiplier(tf);
+  const fallingKnife = price < lower;
 
-    // 🟢 SAFE LONG
-    if (!fallingKnife) {
-      const entry = lower * 1.002;
-      const sl = lower * 0.985;
-      const tp = (upper + lower) / 2;
-      const rr = (tp - entry) / (entry - sl);
+  // SAFE LONG
+  if (!fallingKnife) {
+    const entry = lower * 1.002;
 
-      return {
-        entry,
-        tp,
-        sl,
-        rr,
-        mode: "SAFE",
-        risk: "LOW"
-      };
-    }
-
-    // 🔴 FALLING KNIFE
-    const entry = price;
-    const sl = price * 0.965;
-    const tp = lower; // hồi về lower band
-    const rr = (tp - entry) / (entry - sl);
+    const sl = entry * (1 - 0.01 * mult);
+    const tp = entry * (1 + 0.02 * mult);
 
     return {
       entry,
       tp,
       sl,
-      rr,
-      mode: "FALLING_KNIFE",
-      risk: "HIGH"
+      rr: (tp - entry) / (entry - sl),
+      mode: "SAFE",
+      risk: "LOW"
     };
   }
+
+  // FALLING KNIFE
+  const entry = price;
+  const sl = entry * (1 - 0.015 * mult);
+  const tp = lower;
+
+  return {
+    entry,
+    tp,
+    sl,
+    rr: (tp - entry) / (entry - sl),
+    mode: "FALLING_KNIFE",
+    risk: "HIGH"
+  };
+}
+
 
   // ===== SHORT =====
-  if (signal === "SHORT") {
+if (signal === "SHORT") {
 
-    const overPump = price > upper;
+  const mult = tfMultiplier(tf);
+  const overPump = price > upper;
 
-    // 🟢 SAFE SHORT
-    if (!overPump) {
-      const entry = upper * 0.998;
-      const sl = upper * 1.015;
-      const tp = (upper + lower) / 2;
-      const rr = (entry - tp) / (sl - entry);
+  // SAFE SHORT
+  if (!overPump) {
+    const entry = upper * 0.998;
 
-      return {
-        entry,
-        tp,
-        sl,
-        rr,
-        mode: "SAFE",
-        risk: "LOW"
-      };
-    }
-
-    // 🔴 FOMO SHORT
-    const entry = price;
-    const sl = price * 1.035;
-    const tp = upper;
-    const rr = (entry - tp) / (sl - entry);
+    const sl = entry * (1 + 0.01 * mult);
+    const tp = entry * (1 - 0.02 * mult);
 
     return {
       entry,
       tp,
       sl,
-      rr,
-      mode: "FOMO",
-      risk: "HIGH"
+      rr: (entry - tp) / (sl - entry),
+      mode: "SAFE",
+      risk: "LOW"
     };
   }
+
+  // FOMO SHORT
+  const entry = price;
+  const sl = entry * (1 + 0.015 * mult);
+  const tp = upper;
+
+  return {
+    entry,
+    tp,
+    sl,
+    rr: (entry - tp) / (sl - entry),
+    mode: "FOMO",
+    risk: "HIGH"
+  };
+}
+
 
   return null;
 }
@@ -156,8 +166,10 @@ const trade = calcTrade({
   price,
   lower: state.lower,
   upper: state.upper,
-  signal
-}) || {};
+  signal,
+  tf
+});
+
 
 const isNew = signal !== "WAIT" && signal !== state.lastSignal;
 
