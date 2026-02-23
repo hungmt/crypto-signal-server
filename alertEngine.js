@@ -29,44 +29,96 @@ function startPriceStream() {
 
 /* ================= ATR ================= */
 function calcATR(arr) {
-  return arr.slice(-15).reduce((a,b,i,ar)=>
-    i===0?0:a+Math.abs(b-ar[i-1]),0)/14;
+  return arr.slice(-15).reduce((a, b, i, ar) =>
+    i === 0 ? 0 : a + Math.abs(b - ar[i - 1]), 0) / 14;
 }
 
 /* ================= TRADE LEVELS ================= */
-function calcTrade(price, upper, lower, mid, atr, signal) {
-  if (!price || !upper || !lower || !mid || !atr) {
-    return { entry:null, tp:null, sl:null, rr:null };
-  }
+function calcTrade({ price, lower, upper, signal }) {
+  if (!price || !lower || !upper) return null;
 
+  // ===== LONG =====
   if (signal === "LONG") {
-    const sl = lower - atr * 1.5;
-    const tp = mid;
-    const rr = (tp - price) / (price - sl);
+
+    const fallingKnife = price < lower;
+
+    // 🟢 SAFE LONG
+    if (!fallingKnife) {
+      const entry = lower * 1.002;
+      const sl = lower * 0.985;
+      const tp = (upper + lower) / 2;
+      const rr = (tp - entry) / (entry - sl);
+
+      return {
+        entry,
+        tp,
+        sl,
+        rr,
+        mode: "SAFE",
+        risk: "LOW"
+      };
+    }
+
+    // 🔴 FALLING KNIFE
+    const entry = price;
+    const sl = price * 0.965;
+    const tp = lower; // hồi về lower band
+    const rr = (tp - entry) / (entry - sl);
 
     return {
-      entry: price,
+      entry,
       tp,
       sl,
-      rr: Number(rr.toFixed(2))
+      rr,
+      mode: "FALLING_KNIFE",
+      risk: "HIGH"
     };
   }
 
+  // ===== SHORT =====
   if (signal === "SHORT") {
-    const sl = upper + atr * 1.5;
-    const tp = mid;
-    const rr = (price - tp) / (sl - price);
+
+    const overPump = price > upper;
+
+    // 🟢 SAFE SHORT
+    if (!overPump) {
+      const entry = upper * 0.998;
+      const sl = upper * 1.015;
+      const tp = (upper + lower) / 2;
+      const rr = (entry - tp) / (sl - entry);
+
+      return {
+        entry,
+        tp,
+        sl,
+        rr,
+        mode: "SAFE",
+        risk: "LOW"
+      };
+    }
+
+    // 🔴 FOMO SHORT
+    const entry = price;
+    const sl = price * 1.035;
+    const tp = upper;
+    const rr = (entry - tp) / (sl - entry);
 
     return {
-      entry: price,
+      entry,
       tp,
       sl,
-      rr: Number(rr.toFixed(2))
+      rr,
+      mode: "FOMO",
+      risk: "HIGH"
     };
   }
 
-  return { entry:null, tp:null, sl:null, rr:null };
+  return null;
 }
+
+module.exports = calcTrade;
+
+
 
 /* ================= SIGNAL ENGINE ================= */
 function checkSignal(symbol, tf) {
@@ -98,55 +150,58 @@ function checkSignal(symbol, tf) {
   }
 
   /* ===== TRADE LEVELS REALTIME ===== */
-  const trade = calcTrade(
-    price,
-    state.upper,
-    state.lower,
-    state.mid,
-    state.atr,
-    signal
-  );
+  /* ===== TRADE LEVELS REALTIME ===== */
+/* ===== TRADE LEVELS REALTIME ===== */
+const trade = calcTrade({
+  price,
+  lower: state.lower,
+  upper: state.upper,
+  signal
+}) || {};
 
-  const isNew = signal !== "WAIT" && signal !== state.lastSignal;
+const isNew = signal !== "WAIT" && signal !== state.lastSignal;
 
-  if (isNew && trade.entry) {
-    pushSignal({
-      symbol,
-      interval: tf,
-      signal,
-      strength,
-      price,
-      rsi: Number(state.rsi.toFixed(2)),
-      ...trade
-    });
-
-    saveHistory({
-      symbol,
-      interval: tf,
-      signal,
-      strength,
-      entry: trade.entry,
-      tp: trade.tp,
-      sl: trade.sl,
-      rsi: state.rsi,
-      price
-    });
-  }
-
-  signalsCache[symbol][tf] = {
-    ...state,
-    price,
+if (isNew && trade.entry != null) {
+  pushSignal({
+    symbol,
+    interval: tf,
     signal,
     strength,
-    lastSignal: signal,
+    price,
+    rsi: Number(state.rsi.toFixed(2)),
+    ...trade
+  });
+
+  saveHistory({
+    symbol,
+    interval: tf,
+    signal,
+    strength,
     entry: trade.entry,
     tp: trade.tp,
     sl: trade.sl,
-    rr: trade.rr,
-    time: Date.now()
-  };
+    rsi: state.rsi,
+    price
+  });
+}
 
-  fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
+signalsCache[symbol][tf] = {
+  ...state,
+  price,
+  signal,
+  strength,
+  entry: trade.entry ?? null,
+  tp: trade.tp ?? null,
+  sl: trade.sl ?? null,
+  rr: trade.rr ?? null,
+  mode: trade.mode ?? null,
+  risk: trade.risk ?? null,
+  lastSignal: signal,
+  time: Date.now()
+};
+
+fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
+
 }
 
 /* ================= KLINE SUB ================= */

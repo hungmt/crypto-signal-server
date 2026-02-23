@@ -97,6 +97,47 @@ class _DashboardPageState extends State<DashboardPage> {
     final s = symbol.replaceAll("USDT", "_USDT");
     return "https://futures.mexc.com/exchange/$s?inviteCode=5ivHrwsQ";
   }
+Widget buildRiskBadge(String? risk, String? mode) {
+  if (risk == null) return SizedBox();
+
+  Color color;
+  String text;
+
+  switch (risk) {
+    case "HIGH":
+      color = Colors.red;
+      text = "⚠ HIGH RISK";
+      break;
+    case "MEDIUM":
+      color = Colors.orange;
+      text = "⚠ MEDIUM RISK";
+      break;
+    default:
+      color = Colors.green;
+      text = "SAFE TRADE";
+  }
+
+  if (mode == "FALLING_KNIFE") {
+    text += " (Bắt dao rơi)";
+  }
+
+  return Container(
+    margin: EdgeInsets.only(top: 6),
+    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.15),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(
+        color: color,
+        fontWeight: FontWeight.bold,
+        fontSize: 12,
+      ),
+    ),
+  );
+}
 
   String fmt(dynamic v) {
     if (v == null) return "-";
@@ -262,6 +303,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                           color: Colors.red,
                                           fontWeight:
                                               FontWeight.bold)),
+                                               buildRiskBadge(s['risk'], s['mode']),
                                 ],
                               ),
                             ),
