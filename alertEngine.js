@@ -168,12 +168,11 @@ const trade = calcTrade({
   upper: state.upper,
   signal,
   tf
-});
-
+}) || {};
 
 const isNew = signal !== "WAIT" && signal !== state.lastSignal;
 
-if (isNew && trade.entry != null) {
+if (isNew && trade.entry) {
   pushSignal({
     symbol,
     interval: tf,
@@ -202,15 +201,16 @@ signalsCache[symbol][tf] = {
   price,
   signal,
   strength,
-  entry: trade.entry ?? null,
-  tp: trade.tp ?? null,
-  sl: trade.sl ?? null,
-  rr: trade.rr ?? null,
-  mode: trade.mode ?? null,
-  risk: trade.risk ?? null,
+  entry: trade.entry || null,
+  tp: trade.tp || null,
+  sl: trade.sl || null,
+  rr: trade.rr || null,
+  mode: trade.mode || null,
+  risk: trade.risk || null,
   lastSignal: signal,
   time: Date.now()
 };
+
 
 fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
 
