@@ -34,96 +34,97 @@ function calcATR(arr) {
 }
 function tfMultiplier(tf) {
   return {
-    "15m": 0.6,
-    "1h": 1,
-    "4h": 1.8,
-    "1d": 3
-  }[tf] || 1;
+    "15m": { tp: 1, sl: 1 },
+    "1h":  { tp: 1.4, sl: 1.1 },
+    "4h":  { tp: 2.2, sl: 1.3 },
+    "1d":  { tp: 3.5, sl: 1.6 }
+  }[tf] || { tp: 1, sl: 1 };
 }
+
 
 /* ================= TRADE LEVELS ================= */
 function calcTrade({ price, lower, upper, signal, tf }) {
   if (!price || !lower || !upper) return null;
 
   // ===== LONG =====
+ const mult = tfMultiplier(tf);
+
+  // ===== LONG =====
   if (signal === "LONG") {
 
-  const mult = tfMultiplier(tf);
-  const fallingKnife = price < lower;
+    const fallingKnife = price < lower;
 
-  // SAFE LONG
-  if (!fallingKnife) {
-    const entry = lower * 1.002;
+    // SAFE LONG
+    if (!fallingKnife) {
+      const entry = lower * 1.002;
 
-    const sl = entry * (1 - 0.01 * mult);
-    const tp = entry * (1 + 0.02 * mult);
+      const sl = entry * (1 - 0.01 * mult.sl);
+      const tp = entry * (1 + 0.02 * mult.tp);
+
+      return {
+        entry,
+        tp,
+        sl,
+        rr: (tp - entry) / (entry - sl),
+        mode: "SAFE",
+        risk: "LOW"
+      };
+    }
+
+    // FALLING KNIFE (HIGH RISK giữ nguyên)
+    const entry = price;
+    const sl = entry * (1 - 0.015 * mult.sl);
+    const tp = lower;
 
     return {
       entry,
       tp,
       sl,
       rr: (tp - entry) / (entry - sl),
-      mode: "SAFE",
-      risk: "LOW"
+      mode: "FALLING_KNIFE",
+      risk: "HIGH"
     };
   }
 
-  // FALLING KNIFE
-  const entry = price;
-  const sl = entry * (1 - 0.015 * mult);
-  const tp = lower;
-
-  return {
-    entry,
-    tp,
-    sl,
-    rr: (tp - entry) / (entry - sl),
-    mode: "FALLING_KNIFE",
-    risk: "HIGH"
-  };
-}
-
-
   // ===== SHORT =====
-if (signal === "SHORT") {
+ if (signal === "SHORT") {
 
-  const mult = tfMultiplier(tf);
-  const overPump = price > upper;
+    const overPump = price > upper;
 
-  // SAFE SHORT
-  if (!overPump) {
-    const entry = upper * 0.998;
+    // SAFE SHORT
+    if (!overPump) {
+      const entry = upper * 0.998;
 
-    const sl = entry * (1 + 0.01 * mult);
-    const tp = entry * (1 - 0.02 * mult);
+      const sl = entry * (1 + 0.01 * mult.sl);
+      const tp = entry * (1 - 0.02 * mult.tp);
+
+      return {
+        entry,
+        tp,
+        sl,
+        rr: (entry - tp) / (sl - entry),
+        mode: "SAFE",
+        risk: "LOW"
+      };
+    }
+
+    // FOMO SHORT (HIGH RISK giữ nguyên)
+    const entry = price;
+    const sl = entry * (1 + 0.015 * mult.sl);
+    const tp = upper;
 
     return {
       entry,
       tp,
       sl,
       rr: (entry - tp) / (sl - entry),
-      mode: "SAFE",
-      risk: "LOW"
+      mode: "FOMO",
+      risk: "HIGH"
     };
   }
 
-  // FOMO SHORT
-  const entry = price;
-  const sl = entry * (1 + 0.015 * mult);
-  const tp = upper;
-
-  return {
-    entry,
-    tp,
-    sl,
-    rr: (entry - tp) / (sl - entry),
-    mode: "FOMO",
-    risk: "HIGH"
-  };
-}
-
-
   return null;
+
 }
 
 module.exports = calcTrade;

@@ -36395,11 +36395,11 @@ case"MEDIUM":s=B.IF
 r="\u26a0 MEDIUM RISK"
 break
 default:s=B.fL
-r="SAFE TRADE"}if(b==="FALLING_KNIFE")r+=" (B\u1eaft dao r\u01a1i)"
+r="SAFE TRADE"}if(b==="FALLING_KNIFE")r+=" (FALLING KNIFE)"
 q=s.a
 q=A.U(38,q>>>16&255,q>>>8&255,q&255)
 p=A.UU(6)
-return A.kV(o,A.dm(r,o,o,o,A.hh(o,o,s,o,o,o,o,o,o,o,o,12,o,o,B.b6,o,o,!0,o,o,o,o,o,o,o,o),o,o),B.v,o,o,new A.d7(q,o,o,p,o,o,B.av),o,new A.aA(0,6,0,0),new A.aA(8,4,8,4),o)},
+return A.kV(o,A.dm(r,o,o,o,A.hh(o,o,s,o,o,o,o,o,o,o,o,12,o,o,B.b6,o,o,!0,o,o,o,o,o,o,o,o),o,o),B.v,o,o,new A.d7(q,o,o,p,o,o,B.av),o,new A.aA(0,0,0,0),new A.aA(8,0,8,0),o)},
 wP(a){if(a==null)return"-"
 return B.d.a5(A.eM(a),4)},
 t3(a){return this.ahw(a)},

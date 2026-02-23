@@ -118,12 +118,12 @@ Widget buildRiskBadge(String? risk, String? mode) {
   }
 
   if (mode == "FALLING_KNIFE") {
-    text += " (Bắt dao rơi)";
+    text += " (FALLING KNIFE)";
   }
 
   return Container(
-    margin: EdgeInsets.only(top: 6),
-    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    margin: EdgeInsets.only(top: 0),
+    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
     decoration: BoxDecoration(
       color: color.withOpacity(0.15),
       borderRadius: BorderRadius.circular(6),
