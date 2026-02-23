@@ -34,32 +34,32 @@ function calcATR(arr) {
 }
 function tfMultiplier(tf) {
   return {
-    "15m": { tp: 1, sl: 1 },
-    "1h":  { tp: 1.4, sl: 1.1 },
-    "4h":  { tp: 2.2, sl: 1.3 },
-    "1d":  { tp: 3.5, sl: 1.6 }
-  }[tf] || { tp: 1, sl: 1 };
+    "15m": 0.6,
+    "1h": 1,
+    "4h": 1.8,
+    "1d": 3
+  }[tf] || 1;
 }
 
 
 /* ================= TRADE LEVELS ================= */
 function calcTrade({ price, lower, upper, signal, tf }) {
-  if (!price || !lower || !upper) return null;
+  if (!price || !lower || !upper || signal === "WAIT") return null;
 
-  // ===== LONG =====
- const mult = tfMultiplier(tf);
+  const mult = tfMultiplier(tf);
 
-  // ===== LONG =====
+  /* ================= LONG ================= */
   if (signal === "LONG") {
 
     const fallingKnife = price < lower;
 
-    // SAFE LONG
+    /* ===== SAFE LONG ===== */
     if (!fallingKnife) {
+
       const entry = lower * 1.002;
 
-      const sl = entry * (1 - 0.01 * mult.sl);
-      const tp = entry * (1 + 0.02 * mult.tp);
+      const sl = entry * (1 - 0.01 * mult);
+      const tp = entry * (1 + 0.02 * mult);
 
       return {
         entry,
@@ -71,10 +71,14 @@ function calcTrade({ price, lower, upper, signal, tf }) {
       };
     }
 
-    // FALLING KNIFE (HIGH RISK giữ nguyên)
+    /* ===== FALLING KNIFE (HIGH RISK) ===== */
+
     const entry = price;
-    const sl = entry * (1 - 0.015 * mult.sl);
-    const tp = lower;
+
+    const sl = entry * (1 - 0.015 * mult);
+
+    // 🔥 TP hồi theo timeframe
+    const tp = entry * (1 + 0.015 * mult);
 
     return {
       entry,
@@ -86,17 +90,18 @@ function calcTrade({ price, lower, upper, signal, tf }) {
     };
   }
 
-  // ===== SHORT =====
- if (signal === "SHORT") {
+  /* ================= SHORT ================= */
+  if (signal === "SHORT") {
 
     const overPump = price > upper;
 
-    // SAFE SHORT
+    /* ===== SAFE SHORT ===== */
     if (!overPump) {
+
       const entry = upper * 0.998;
 
-      const sl = entry * (1 + 0.01 * mult.sl);
-      const tp = entry * (1 - 0.02 * mult.tp);
+      const sl = entry * (1 + 0.01 * mult);
+      const tp = entry * (1 - 0.02 * mult);
 
       return {
         entry,
@@ -108,10 +113,14 @@ function calcTrade({ price, lower, upper, signal, tf }) {
       };
     }
 
-    // FOMO SHORT (HIGH RISK giữ nguyên)
+    /* ===== FOMO SHORT (HIGH RISK) ===== */
+
     const entry = price;
-    const sl = entry * (1 + 0.015 * mult.sl);
-    const tp = upper;
+
+    const sl = entry * (1 + 0.015 * mult);
+
+    // 🔥 TP theo timeframe
+    const tp = entry * (1 - 0.015 * mult);
 
     return {
       entry,
@@ -124,8 +133,8 @@ function calcTrade({ price, lower, upper, signal, tf }) {
   }
 
   return null;
-
 }
+
 
 module.exports = calcTrade;
 
