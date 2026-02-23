@@ -1,205 +1,157 @@
-// alertEngine.js
-const axios = require("axios");
 const fs = require("fs");
 const WebSocket = require("ws");
 const { RSI } = require("technicalindicators");
 const { pushSignal } = require("./notifier");
 const { saveHistory } = require("./saveHistory");
+const { nadarayaWatsonLux, envelopeLux } = require("./indicator");
 
 const INTERVALS = ["15m", "1h", "2h", "4h", "1d"];
+
+/* ================= LOAD CACHE ================= */
 
 const signalsCache = fs.existsSync("signals.json")
   ? JSON.parse(fs.readFileSync("signals.json"))
   : {};
 
-const indicatorCache = {};
 const priceMap = {};
 const klineCache = {};
-/* ================= PRICE STREAM ================= */
-function atrMultiplier(tf) {
-  return {
-    "15m": 1.2,
-    "1h": 1.5,
-    "2h": 1.8,
-    "4h": 2.2,
-    "1d": 3.0,
-  }[tf] || 1.5;
-}
-function calcTrade(price, up, lo, mid, atr, tf, signal) {
-  if (!atr || !up || !lo || !mid) {
-    return { entry: null, tp: null, sl: null, rr: null };
-  }
 
-  const k = atrMultiplier(tf);
+/* ================= SIGNAL STRENGTH ================= */
+
+function getSignalStrength(signal, rsi, price, upper, lower, mid) {
+  let score = 0;
+
+  // độ lệch khỏi envelope
+  const distance =
+    signal === "LONG"
+      ? (lower - price) / lower
+      : (price - upper) / upper;
+
+  if (distance > 0.002) score++;
+  if (distance > 0.004) score++;
+
+  // RSI cực đoan
+  if (signal === "LONG" && rsi < 25) score++;
+  if (signal === "SHORT" && rsi > 75) score++;
+
+  // RSI cực mạnh
+  if (signal === "LONG" && rsi < 15) score++;
+  if (signal === "SHORT" && rsi > 85) score++;
+
+  // vị trí so với mid (trend confirmation)
+  if (signal === "LONG" && price < mid) score++;
+  if (signal === "SHORT" && price > mid) score++;
+
+  if (score >= 4) return "EXTREME";
+  if (score >= 3) return "STRONG";
+  if (score >= 2) return "NORMAL";
+  return "WEAK";
+}
+
+/* ================= ATR ================= */
+
+function calcATR(arr) {
+  return (
+    arr.slice(-15).reduce((a, b, i, ar) =>
+      i === 0 ? 0 : a + Math.abs(b - ar[i - 1]), 0
+    ) / 14
+  );
+}
+
+/* ================= TRADE ================= */
+
+function calcTrade(price, up, lo, mid, atr, signal) {
+  if (!atr) return {};
 
   if (signal === "LONG") {
-
-    // ⭐ CHỐNG ĐẢO
-    if (!(lo < price && mid > price)) {
-      return { entry: null, tp: null, sl: null, rr: null };
-    }
-
-    const sl = lo - atr * k;
+    const sl = lo - atr * 1.5;
     const tp = mid;
     const rr = (tp - price) / (price - sl);
-
-    return {
-      entry: price,
-      tp,
-      sl,
-      rr: Number(rr.toFixed(2)),
-    };
+    return { entry: price, tp, sl, rr: Number(rr.toFixed(2)) };
   }
 
   if (signal === "SHORT") {
-
-    // ⭐ CHỐNG ĐẢO
-    if (!(up > price && mid < price)) {
-      return { entry: null, tp: null, sl: null, rr: null };
-    }
-
-    const sl = up + atr * k;
+    const sl = up + atr * 1.5;
     const tp = mid;
     const rr = (price - tp) / (sl - price);
-
-    return {
-      entry: price,
-      tp,
-      sl,
-      rr: Number(rr.toFixed(2)),
-    };
+    return { entry: price, tp, sl, rr: Number(rr.toFixed(2)) };
   }
 
-  return { entry: null, tp: null, sl: null, rr: null };
-}
-function startPriceStream() {
-  const ws = new WebSocket("wss://fstream.binance.com/ws/!markPrice@arr");
-
-  ws.on("message", (msg) => {
-    JSON.parse(msg).forEach(p => {
-      priceMap[p.s] = Number(p.p);
-    });
-  });
-
-  ws.on("close", () => setTimeout(startPriceStream, 2000));
+  return {};
 }
 
-/* ================= KLINE SUB ================= */
-
-/* ================= FETCH KLINES ================= */
-
-async function getKlines(symbol, tf) {
-  const { data } = await axios.get(
-    "https://fapi.binance.com/fapi/v1/klines",
-    { params: { symbol, interval: tf, limit: 200 } }
-  );
-
-  return data.map(k => Number(k[4]));
-}
-
-/* ================= INDICATORS ================= */
-
-async function updateIndicators(symbol, tf) {
-  const closes = await getKlines(symbol, tf);
-  const rsi = RSI.calculate({ values: closes, period: 14 }).at(-1);
-
-  const max = Math.max(...closes.slice(-50));
-  const min = Math.min(...closes.slice(-50));
-
-  if (!indicatorCache[symbol]) indicatorCache[symbol] = {};
-  indicatorCache[symbol][tf] = { rsi, upper: max, lower: min };
-}
-
-/* ================= SIGNAL ENGINE (STATEFUL) ================= */
-async function preloadKlinesSafe(symbol, tf) {
-  await new Promise(r => setTimeout(r, 500)); // chống rate limit
-
-  const { data } = await axios.get(
-    "https://fapi.binance.com/fapi/v1/klines",
-    { params: { symbol, interval: tf, limit: 60 } }
-  );
-
-  if (!klineCache[symbol]) klineCache[symbol] = {};
-  if (!klineCache[symbol][tf]) {
-    klineCache[symbol][tf] = data.map(k => Number(k[4]));
-  }
-}
+/* ================= SIGNAL CHECK ================= */
 
 function checkSignal(symbol, tf) {
-  const price = priceMap[symbol];
   const c = signalsCache?.[symbol]?.[tf];
-
-  if (!price || !c) return;
-
-  if (!signalsCache[symbol]) signalsCache[symbol] = {};
-  if (!signalsCache[symbol][tf]) {
-    signalsCache[symbol][tf] = { lastSignal: "WAIT" };
-  }
+  const price = priceMap[symbol];
+  if (!c || !price || c.rsi == null) return;
 
   const prev = signalsCache[symbol][tf];
   let signal = "WAIT";
 
-  // ⭐ ĐIỀU KIỆN QUAN TRỌNG BỊ THIẾU
-  if (
-    price < c.lower &&
-    c.lower < c.mid &&
-    c.rsi < 35
-  ) {
+  // ===== SIGNAL CONDITIONS =====
+  if (price <= c.lower && c.rsi < 40 && price > prev.price) {
     signal = "LONG";
   }
-  else if (
-    price > c.upper &&
-    c.upper > c.mid &&
-    c.rsi > 65
-  ) {
+
+  if (price >= c.upper && c.rsi > 60 && price < prev.price) {
     signal = "SHORT";
   }
 
-  const isNewSignal =
-    prev.lastSignal === "WAIT" && signal !== "WAIT";
+  if (signal === "WAIT") return;
 
-  let trade = {
-    entry: prev.entry,
-    tp: prev.tp,
-    sl: prev.sl,
-    rr: prev.rr,
-  };
+  const strength = getSignalStrength(
+    signal,
+    c.rsi,
+    price,
+    c.upper,
+    c.lower,
+    c.mid
+  );
 
-  if (isNewSignal) {
-    trade = calcTrade(price, c.upper, c.lower, c.mid, c.atr, tf, signal);
+  // ❗ bỏ tín hiệu yếu
+  if (strength === "WEAK") return;
 
-    if (trade.entry) {
-      pushSignal({
-        symbol,
-        interval: tf,
-        signal,
-        price,
-        rsi: Number(c.rsi.toFixed(2)),
-        ...trade,
-      });
-      saveHistory({
-        symbol,
-        interval: tf,
-        signal,
-        entry: trade.entry,
-        tp: trade.tp,
-        sl: trade.sl,
-        rsi: Number(c.rsi.toFixed(2)),
-        price,
-      });
-    }
-  }
+  const isNew =
+    signal !== prev.lastSignal;
 
-  signalsCache[symbol][tf] = {
+  if (!isNew) return;
+
+  const trade = calcTrade(price, c.upper, c.lower, c.mid, c.atr, signal);
+
+  console.log(
+    `🚨 ${symbol} ${tf} ${signal} | RSI ${c.rsi.toFixed(1)} | ${strength}`
+  );
+
+  pushSignal({
     symbol,
     interval: tf,
+    signal,
     price,
     rsi: Number(c.rsi.toFixed(2)),
-    lower: c.lower,
-    upper: c.upper,
-    mid: c.mid,
+    strength,
+    ...trade,
+  });
+
+  saveHistory({
+    symbol,
+    interval: tf,
+    signal,
+    strength,
+    entry: trade.entry,
+    tp: trade.tp,
+    sl: trade.sl,
+    rsi: Number(c.rsi.toFixed(2)),
+    price,
+  });
+
+  signalsCache[symbol][tf] = {
+    ...c,
     signal,
     lastSignal: signal,
+    strength,
+    price,
     time: Date.now(),
     ...trade,
   };
@@ -207,49 +159,49 @@ function checkSignal(symbol, tf) {
   fs.writeFileSync("signals.json", JSON.stringify(signalsCache));
 }
 
+/* ================= KLINE STREAM ================= */
+
 function subscribeKline(symbol, tf) {
-  const stream = `${symbol.toLowerCase()}@kline_${tf}`;
-  const ws = new WebSocket(`wss://fstream.binance.com/ws/${stream}`);
+  const ws = new WebSocket(
+    `wss://fstream.binance.com/ws/${symbol.toLowerCase()}@kline_${tf}`
+  );
 
   if (!klineCache[symbol]) klineCache[symbol] = {};
-  if (!klineCache[symbol][tf]) klineCache[symbol][tf] = [];
+  klineCache[symbol][tf] = [];
 
-  ws.on("message", (msg) => {
+  ws.on("message", msg => {
     const k = JSON.parse(msg).k;
-
     const arr = klineCache[symbol][tf];
 
-    // ⭐ LẤY CẢ NẾN CHƯA ĐÓNG để preload cực nhanh
     arr.push(Number(k.c));
     if (arr.length > 200) arr.shift();
-
-    if (arr.length < 50) return;
+    if (arr.length < 60) return;
 
     const rsi = RSI.calculate({ values: arr, period: 14 }).at(-1);
-    const upper = Math.max(...arr.slice(-50));
-    const lower = Math.min(...arr.slice(-50));
-    const mid = (upper + lower) / 2;
 
-    const atr =
-      arr.slice(-15).reduce((a, b, i, ar) =>
-        i === 0 ? 0 : a + Math.abs(b - ar[i - 1]), 0
-      ) / 14;
+    const nw = nadarayaWatsonLux(arr, 8, 60);
+    const { upper, lower } = envelopeLux(nw, arr, 60, 2);
+
+    const mid = nw.at(-1);
+    const up = upper.at(-1);
+    const lo = lower.at(-1);
+
+    const atr = calcATR(arr);
 
     if (!signalsCache[symbol]) signalsCache[symbol] = {};
-    if (!signalsCache[symbol][tf]) {
+    if (!signalsCache[symbol][tf])
       signalsCache[symbol][tf] = { lastSignal: "WAIT" };
-    }
 
     signalsCache[symbol][tf] = {
       ...signalsCache[symbol][tf],
       rsi,
-      upper,
-      lower,
+      upper: up,
+      lower: lo,
       mid,
       atr,
     };
 
-    checkSignal(symbol, tf);
+    if (k.x) checkSignal(symbol, tf);
   });
 
   ws.on("close", () =>
@@ -257,22 +209,15 @@ function subscribeKline(symbol, tf) {
   );
 }
 
-
+/* ================= PRICE ================= */
 
 function subscribePrice(symbol) {
   const ws = new WebSocket(
     `wss://fstream.binance.com/ws/${symbol.toLowerCase()}@markPrice`
   );
 
-  ws.on("message", (msg) => {
-    const data = JSON.parse(msg);
-    const price = Number(data.p);
-
-    for (const tf of INTERVALS) {
-      if (signalsCache[symbol]?.[tf]) {
-        signalsCache[symbol][tf].price = price;
-      }
-    }
+  ws.on("message", msg => {
+    priceMap[symbol] = Number(JSON.parse(msg).p);
   });
 
   ws.on("close", () =>
@@ -280,11 +225,10 @@ function subscribePrice(symbol) {
   );
 }
 
-/* ================= INIT SYMBOL ================= */
+/* ================= INIT ================= */
 
-async function initSymbol(symbol) {
+function initSymbol(symbol) {
   if (!signalsCache[symbol]) signalsCache[symbol] = {};
-  if (!klineCache[symbol]) klineCache[symbol] = {};
 
   subscribePrice(symbol);
 
@@ -293,31 +237,16 @@ async function initSymbol(symbol) {
       symbol,
       interval: tf,
       signal: "WAIT",
+      lastSignal: "WAIT",
       price: 0,
       rsi: 0,
-      entry: null,
-      tp: null,
-      sl: null,
       time: Date.now(),
     };
 
     subscribeKline(symbol, tf);
   }
 
-  console.log("✅ Init symbol:", symbol);
+  console.log("✅ Init:", symbol);
 }
-
-
-/* ================= LOOP ================= */
-
-setInterval(() => {
-  for (const symbol in signalsCache) {
-    for (const tf of INTERVALS) {
-      checkSignal(symbol, tf);
-    }
-  }
-}, 1000);
-
-startPriceStream();
 
 module.exports = { initSymbol, signalsCache };

@@ -2,12 +2,15 @@ const axios = require("axios");
 const fs = require("fs");
 const { sendTelegram } = require("./telegram");
 const { postTweet } = require("./twitter");
+
 const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
 const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY;
 
 const PUSH_LOG_FILE = "pushlog.json";
 
-// lưu lịch sử push để chống trùng
+// ===============================
+// LOAD PUSH HISTORY
+// ===============================
 let pushLog = {};
 if (fs.existsSync(PUSH_LOG_FILE)) {
   pushLog = JSON.parse(fs.readFileSync(PUSH_LOG_FILE));
@@ -15,12 +18,9 @@ if (fs.existsSync(PUSH_LOG_FILE)) {
 
 function shouldPush(key) {
   const now = Date.now();
-
-  // cooldown 30 phút cho cùng 1 signal
-  const COOLDOWN = 30 * 60 * 1000;
+  const COOLDOWN = 30 * 60 * 1000; // 30 phút
 
   if (!pushLog[key]) return true;
-
   return now - pushLog[key] > COOLDOWN;
 }
 
@@ -29,9 +29,36 @@ function markPushed(key) {
   fs.writeFileSync(PUSH_LOG_FILE, JSON.stringify(pushLog));
 }
 
+// ===============================
+// BUILD MESSAGE (SEO + VIRAL)
+// ===============================
+function buildMessage(data) {
+  const emoji = data.signal === "BUY" ? "🚀" : "🔻";
+
+  return `${emoji} ${data.symbol} ${data.signal}
+
+Price: ${data.price}
+RSI: ${data.rsi}
+Trend: ${data.trend}
+Strength: ${data.strength}
+
+${data.volumeSpike ? "Volume spike detected" : ""}
+
+Trade Futures:
+Binance: https://www.binance.com/en/futures/${data.symbol}?ref=83521708
+MEXC: https://futures.mexc.com/exchange/${data.symbol.replace(
+    "USDT",
+    "_USDT"
+  )}?inviteCode=5ivHrwsQ
+
+#crypto #trading #${data.symbol.replace("USDT", "")}`;
+}
+
+// ===============================
+// PUSH SIGNAL
+// ===============================
 async function pushSignal(data) {
   try {
-    // KEY DUY NHẤT CHO MỖI TÍN HIỆU
     const key = `${data.symbol}_${data.interval}_${data.signal}`;
 
     if (!shouldPush(key)) {
@@ -39,6 +66,11 @@ async function pushSignal(data) {
       return;
     }
 
+    const msg = buildMessage(data);
+
+    // ===============================
+    // ONESIGNAL PUSH
+    // ===============================
     await axios.post(
       "https://onesignal.com/api/v1/notifications",
       {
@@ -50,30 +82,12 @@ async function pushSignal(data) {
         },
 
         contents: {
-          en: `Entry: ${data.entry ?? data.price}
-TP: ${data.tp ?? "-"}
-SL: ${data.sl ?? "-"}`,
+          en: msg,
         },
 
         url: `https://cryptosignal.site/?tf=${data.interval}`,
 
         chrome_web_icon: "https://cryptosignal.site/icons/Icon-192.png",
-
-        web_buttons: [
-          {
-            id: "binance",
-            text: "Trade Binance",
-            url: `https://www.binance.com/en/futures/${data.symbol}?ref=83521708`,
-          },
-          {
-            id: "mexc",
-            text: "Trade MEXC",
-            url: `https://futures.mexc.com/exchange/${data.symbol.replace(
-              "USDT",
-              "_USDT"
-            )}?inviteCode=5ivHrwsQ`,
-          },
-        ],
       },
       {
         headers: {
@@ -86,10 +100,18 @@ SL: ${data.sl ?? "-"}`,
     markPushed(key);
 
     console.log("✅ PUSH SENT:", key);
-    await sendTelegram(msg);
-  await postTweet(msg);
 
-  console.log("📣 Social posted:", data.symbol);
+    // ===============================
+    // TELEGRAM
+    // ===============================
+    await sendTelegram(msg);
+
+    // ===============================
+    // TWITTER (X)
+    // ===============================
+    await postTweet(msg);
+
+    console.log("📣 Social posted:", data.symbol);
   } catch (e) {
     console.log("❌ Push error:", e.response?.data || e.message);
   }
