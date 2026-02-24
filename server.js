@@ -5,16 +5,29 @@ const fs = require("fs");
 const axios = require("axios");
 const { signalsCache, initSymbol } = require("./alertEngine");
 const loadSymbols = require("./loadSymbols");
-
+const seoRoutes = require("./routes/seo");
+const sitemap = require("./routes/sitemap");
 const seoSymbols = require("./seoSymbols.json");
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 /* ================= KEEP RENDER AWAKE ================= */
-const seoRoute = require("./seoRoute");
+// const seoRoute = require("./seoRoute");
 
+// ket noi DB
+const connectDB = require("./db");
 
+connectDB();
+const Signal = require("./models/Signal");
+
+app.get("/history", async (req, res) => {
+  const signals = await Signal.find()
+    .sort({ createdAt: -1 })
+    .limit(100);
+
+  res.json(signals);
+});
 const SELF_URL = "https://crypto-signal-server.onrender.com/health";
 
 app.get("/health", (req, res) => res.send("OK"));
@@ -129,5 +142,6 @@ for (const s of seoSymbols) {
     console.error("Bootstrap error", e);
   }
 }
-seoRoute(app);
+app.use("/", seoRoutes);
+app.use("/", sitemap);
 

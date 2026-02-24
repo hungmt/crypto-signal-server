@@ -4,6 +4,7 @@ const WebSocket = require("ws");
 const { RSI } = require("technicalindicators");
 const { pushSignal } = require("./notifier");
 const { saveHistory } = require("./saveHistory");
+const { saveSignal } = require("./services/saveSignal");
 const { nadarayaWatsonLux, envelopeLux } = require("./indicator");
 
 const INTERVALS = ["15m", "1h", "4h", "1d"];
@@ -193,16 +194,28 @@ if (isNew && trade.entry) {
     ...trade
   });
 
-  saveHistory({
+  // saveHistory({
+  //   symbol,
+  //   interval: tf,
+  //   signal,
+  //   strength,
+  //   entry: trade.entry,
+  //   tp: trade.tp,
+  //   sl: trade.sl,
+  //   rsi: state.rsi,
+  //   price
+  // });
+   saveSignal({
     symbol,
     interval: tf,
     signal,
-    strength,
     entry: trade.entry,
     tp: trade.tp,
     sl: trade.sl,
     rsi: state.rsi,
-    price
+    strength,
+    risk: trade.risk,
+    mode: trade.mode
   });
 }
 
