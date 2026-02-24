@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const Signal = require("./models/signal");
+const Signal = require("../models/Signal");
 
 router.get("/sitemap.xml", async (req, res) => {
   const signals = await Signal.find()

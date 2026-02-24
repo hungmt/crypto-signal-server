@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const Signal = require("./models/signal");
+const Signal = require("../models/Signal");
 
 // URL dạng: /btc-15m-signal
 router.get("/:coin-:tf-signal", async (req, res) => {
