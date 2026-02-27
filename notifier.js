@@ -1,7 +1,7 @@
 const axios = require("axios");
 const fs = require("fs");
 const { sendTelegram } = require("./telegram");
-const { postTweet } = require("./twitter");
+const { postTweet, formatProfessionalTweet } = require("./twitter");
 const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
 const ONESIGNAL_API_KEY = process.env.ONESIGNAL_API_KEY;
 
@@ -24,32 +24,25 @@ function shouldPush(key) {
   return now - pushLog[key] > COOLDOWN;
 }
 function formatSocialMessage(data) {
-  const riskIcon = data.risk === "HIGH" ? "⚠️ HIGH RISK" : "🟢 SAFE";
-  const entry = data.entry ?? data.price ?? "-";
-  const tp = data.tp ?? "-";
-  const sl = data.sl ?? "-";
+  // Use professional tweet format for both Telegram and Twitter
+  const coin = data.symbol.replace("USDT", "");
+  const direction = data.signal === "LONG" ? "🟢 LONG" : "🔴 SHORT";
+  const riskEmoji = data.risk === "HIGH" ? "⚠️ HIGH" : "✅ SAFE";
+  
+  return `${direction} SIGNAL: ${coin}/${data.interval}
 
-  return `🔻 ${data.symbol} ${data.signal}
+🎯 Entry: $${(data.entry || data.price).toFixed(2)}
+📈 TP: $${(data.tp || "-").toString().slice(0, 8)}
+🛑 SL: $${(data.sl || "-").toString().slice(0, 8)}
+📊 RSI: ${(data.rsi || "-").toString().slice(0, 5)}
+${riskEmoji} Risk: ${data.risk || "UNKNOWN"}
 
-Price: ${data.price}
-RSI: ${data.rsi ?? "-"}
-TF: ${data.interval}
+🔗 Trade:
+• Binance: binance.com/futures/${data.symbol}
+• MEXC: futures.mexc.com/exchange/${data.symbol.replace("USDT", "_USDT")}
 
-🎯 Entry: ${entry}
-🎯 TP: ${tp}
-🛑 SL: ${sl}
-
-${riskIcon}
-
-Trade Futures:
-Binance:
-https://www.binance.com/en/futures/${data.symbol}?ref=83521708
-
-MEXC:
-https://futures.mexc.com/exchange/${data.symbol.replace(
-    "USDT",
-    "_USDT"
-  )}?inviteCode=5ivHrwsQ`;
+📊 Dashboard: cryptosignal.site
+#Crypto #Trading #${coin}`;
 }
 
 function markPushed(key) {
@@ -113,16 +106,18 @@ SL: ${data.sl ?? "-"}`,
 
     markPushed(key);
 
-
     const msg = formatSocialMessage(data);
-    console.log("✅ PUSH SENT:", key);
+    console.log("✅ [NOTIFY] OneSignal push sent:", key);
+    
+    // Post to Telegram
+    console.log(`📱 [NOTIFY] Posting to Telegram: ${data.symbol} ${data.interval} ${data.signal}`);
     await sendTelegram(msg);
+    
+    // Post to Twitter/X  
+    console.log(`🐦 [NOTIFY] Posting to Twitter: ${data.symbol} ${data.interval} ${data.signal}`);
     await postTweet(msg);
 
-    console.log("📣 Social posted:", data.symbol);
-
-
-    console.log("📣 Social posted:", data.symbol);
+    console.log(`✅ [NOTIFY] All channels posted for ${data.symbol}`);
   } catch (e) {
     console.log("❌ Push error:", e.response?.data || e.message);
   }
