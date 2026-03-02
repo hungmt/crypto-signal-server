@@ -151,8 +151,12 @@ function checkSignal(symbol, tf) {
   let signal = "WAIT";
   let strength = 0;
 
-  const nearLower = price <= state.lower * 1.002;
-  const nearUpper = price >= state.upper * 0.998;
+  // Symmetric tolerance based on band width (1% of band = tolerance)
+  const bandWidth = state.upper - state.lower;
+  const tolerance = bandWidth * 0.01;
+  
+  const nearLower = price <= state.lower + tolerance;
+  const nearUpper = price >= state.upper - tolerance;
 
   /* ===== LONG ===== */
   if (nearLower && state.rsi < 35) {
